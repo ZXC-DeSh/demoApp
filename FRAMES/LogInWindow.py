@@ -1,9 +1,12 @@
 from PySide6.QtWidgets import (QFrame, QPushButton, QHBoxLayout,
                                QWidget, QVBoxLayout, QLabel, QLineEdit)
-
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 import Messages
 from FRAMES import HomePageWindow
 from StaticStorage import Storage
+import os
+
 
 class LogInFrame(QFrame):
     def __init__(self, controller):
@@ -21,10 +24,25 @@ class LogInFrame(QFrame):
 
     def setup_ui(self):
         """ Генерация интерфейса """
-        # Очищаем данные предыдущего пользователя
-        self.clear_user_data()
+        # ИКОНКА ПРИЛОЖЕНИЯ в центре
+        icon_label = QLabel()
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        title = QLabel("Авторизация")
+        # Загружаем иконку
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)
+        icon_path = os.path.join(project_root, "ICONS", "logo.png")
+        
+        if os.path.exists(icon_path):
+            icon_pixmap = QPixmap(icon_path)
+            # Масштабируем иконку (можно настроить размер)
+            icon_pixmap = icon_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, 
+                                           Qt.TransformationMode.SmoothTransformation)
+            icon_label.setPixmap(icon_pixmap)
+        
+        self.frame_layout.addWidget(icon_label)
+
+        title = QLabel("Вход в систему")
         title.setObjectName("Title")
         self.frame_layout.addWidget(title)
         self.frame_layout.addStretch()

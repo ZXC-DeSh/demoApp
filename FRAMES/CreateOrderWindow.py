@@ -6,7 +6,8 @@ from datetime import datetime
 import Messages
 from FRAMES import HomePageWindow, OrdersCardsWindow
 from StaticStorage import Storage
-
+from PySide6.QtGui import QPixmap
+import os
 
 class CreateOrderFrame(QFrame):
     def __init__(self, controller):
@@ -38,6 +39,30 @@ class CreateOrderFrame(QFrame):
         back_header_btn.clicked.connect(self.go_back_to_orders_window)
         back_header_btn.setObjectName("back_header_button")
         header_widget_hbox.addWidget(back_header_btn)
+        header_widget_hbox.addStretch()
+
+        # ЛОГОТИП по центру
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Загружаем логотип
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)
+        logo_path = os.path.join(project_root, "ICONS", "logo.png")
+        
+        if os.path.exists(logo_path):
+            logo_pixmap = QPixmap(logo_path)
+            # Масштабируем логотип до нужного размера
+            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            # Если файл не найден, показываем текстовый логотип
+            logo_label.setText("ОБУВЬ")
+            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
+        
+        header_widget_hbox.addWidget(logo_label)
+
+        # Растягивающий элемент
         header_widget_hbox.addStretch()
 
         # ФИО пользователя
@@ -312,12 +337,27 @@ class CreateOrderFrame(QFrame):
             # Создаем заказ в БД
             if self.database.create_new_order(order_data):
                 Messages.send_I_message("Заказ успешно создан!")
+                
+                # Обновляем список заказов в кэшированном окне
+                self.refresh_orders_frame()
+                
                 self.go_back_to_orders_window()
             else:
                 Messages.send_C_message("Ошибка создания заказа в базе данных!")
 
         except Exception as e:
             Messages.send_C_message(f"Ошибка создания заказа: {str(e)}")
+
+    def refresh_orders_frame(self):
+        """Обновляет данные в окне списка заказов"""
+        try:
+            # Получаем существующий фрейм заказов из кэша
+            orders_frame = self.controller.frames_cache.get('OrdersCardsFrame')
+            if orders_frame:
+                # Вызываем существующий метод обновления
+                orders_frame.update_orders_display()
+        except Exception as e:
+            print(f"Ошибка обновления списка заказов: {e}")
 
     def validate_order_data(self):
         """Валидация данных заказа"""
@@ -388,5 +428,13 @@ class CreateOrderFrame(QFrame):
             raise ValueError(f"Неверный формат даты: {date_str}")
 
     def go_back_to_orders_window(self):
-        """Возврат к списку заказов"""
+        """Возврат к списку заказов с обновлением данных"""
+        # Удаляем старый фрейм из кэша
+        if 'OrdersCardsFrame' in self.controller.frames_cache:
+            old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
+            self.controller.frame_container.removeWidget(old_frame)
+            old_frame.deleteLater()
+        
+        # Создаем новый фрейм
+        from FRAMES import OrdersCardsWindow
         self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)

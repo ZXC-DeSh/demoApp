@@ -5,7 +5,8 @@ from PySide6.QtCore import Qt
 import Messages
 from FRAMES import HomePageWindow, OrdersCardsWindow
 from StaticStorage import Storage
-
+from PySide6.QtGui import QPixmap
+import os
 
 class OrderDetailsFrame(QFrame):
     def __init__(self, controller):
@@ -33,6 +34,30 @@ class OrderDetailsFrame(QFrame):
         back_header_btn.clicked.connect(self.go_back_to_orders_window)
         back_header_btn.setObjectName("back_header_button")
         header_widget_hbox.addWidget(back_header_btn)
+        header_widget_hbox.addStretch()
+
+        # ЛОГОТИП по центру
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Загружаем логотип
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)
+        logo_path = os.path.join(project_root, "ICONS", "logo.png")
+        
+        if os.path.exists(logo_path):
+            logo_pixmap = QPixmap(logo_path)
+            # Масштабируем логотип до нужного размера
+            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            # Если файл не найден, показываем текстовый логотип
+            logo_label.setText("ОБУВЬ")
+            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
+        
+        header_widget_hbox.addWidget(logo_label)
+
+        # Растягивающий элемент
         header_widget_hbox.addStretch()
 
         # ФИО пользователя

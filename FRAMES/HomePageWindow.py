@@ -78,6 +78,30 @@ class HomeFrame(QFrame):
         header_widget_hbox.addWidget(back_header_btn)
         header_widget_hbox.addStretch()
 
+        # ЛОГОТИП по центру
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Загружаем логотип
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)
+        logo_path = os.path.join(project_root, "ICONS", "logo.png")
+        
+        if os.path.exists(logo_path):
+            logo_pixmap = QPixmap(logo_path)
+            # Масштабируем логотип до нужного размера
+            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            # Если файл не найден, показываем текстовый логотип
+            logo_label.setText("ОБУВЬ")
+            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
+        
+        header_widget_hbox.addWidget(logo_label)
+
+        # Растягивающий элемент
+        header_widget_hbox.addStretch()
+
         # Добавление фио
         # получение информации по пользователю (используя Login из статического класса)
         user_data: dict = self.database.take_user_data()
@@ -231,7 +255,7 @@ class HomeFrame(QFrame):
             # Кнопка редактирования
             update_button = QPushButton()
             update_button.setObjectName("update_button")
-            update_button.setFixedHeight(290)
+            update_button.setFixedHeight(280)
 
             # Даем кнопке имя в виде ID, который является PK в таблице
             update_button.setAccessibleName(str(item["id"]))

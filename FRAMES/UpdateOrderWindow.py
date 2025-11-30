@@ -6,7 +6,8 @@ from datetime import datetime
 import Messages
 from FRAMES import HomePageWindow, OrdersCardsWindow
 from StaticStorage import Storage
-
+from PySide6.QtGui import QPixmap
+import os
 
 class UpdateOrderFrame(QFrame):
     def __init__(self, controller):
@@ -15,12 +16,15 @@ class UpdateOrderFrame(QFrame):
         self.database = controller.db
         
         # Данные заказа
+        self.order_data = {}  # Инициализируем пустым словарем
         self.order_items = []
         self.available_products = []
         
         self.frame_layout = QVBoxLayout(self)
-        self.setup_ui()
+        
+        # Сначала загружаем данные, потом создаем UI
         self.load_order_data()
+        self.setup_ui()
 
     def setup_ui(self):
         """Генерация интерфейса"""
@@ -34,6 +38,30 @@ class UpdateOrderFrame(QFrame):
         back_header_btn.clicked.connect(self.go_back_to_orders_window)
         back_header_btn.setObjectName("back_header_button")
         header_widget_hbox.addWidget(back_header_btn)
+        header_widget_hbox.addStretch()
+
+        # ЛОГОТИП по центру
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Загружаем логотип
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)
+        logo_path = os.path.join(project_root, "ICONS", "logo.png")
+        
+        if os.path.exists(logo_path):
+            logo_pixmap = QPixmap(logo_path)
+            # Масштабируем логотип до нужного размера
+            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+        else:
+            # Если файл не найден, показываем текстовый логотип
+            logo_label.setText("ОБУВЬ")
+            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
+        
+        header_widget_hbox.addWidget(logo_label)
+
+        # Растягивающий элемент
         header_widget_hbox.addStretch()
 
         user_data = self.database.take_user_data()
@@ -81,9 +109,15 @@ class UpdateOrderFrame(QFrame):
             
         except Exception as e:
             Messages.send_C_message(f"Ошибка загрузки данных заказа: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def create_order_form(self):
         """Создает форму редактирования заказа"""
+        if not self.order_data:
+            Messages.send_C_message("Данные заказа не загружены!")
+            return
+
         # Клиент
         self.client_input = self.create_input_field("Клиент:", self.order_data.get('client_name', ''), True)
         self.form_layout.addWidget(self.client_input)
@@ -129,7 +163,7 @@ class UpdateOrderFrame(QFrame):
         layout = QVBoxLayout(widget)
         layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
         input_field = QLineEdit()
-        input_field.setText(value)
+        input_field.setText(str(value))
         input_field.setReadOnly(readonly)
         input_field.setObjectName("UpdateTextEdit")
         layout.addWidget(input_field)
@@ -167,6 +201,7 @@ class UpdateOrderFrame(QFrame):
             self.items_table.setItem(row, 2, quantity_item)
             
             delete_btn = QPushButton("Удалить")
+            delete_btn.setObjectName("button")
             delete_btn.clicked.connect(lambda checked, r=row: self.remove_order_item(r))
             self.items_table.setCellWidget(row, 3, delete_btn)
 
@@ -201,6 +236,8 @@ class UpdateOrderFrame(QFrame):
 
         except Exception as e:
             Messages.send_C_message(f"Ошибка сохранения: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def validate_order_data(self):
         """Валидация данных заказа"""
@@ -241,7 +278,8 @@ class UpdateOrderFrame(QFrame):
 
     def delete_order(self):
         """Удаляет заказ"""
-        if Messages.send_I_message("Вы точно хотите удалить этот заказ?") < 20000:
+        reply = Messages.send_I_message("Вы точно хотите удалить этот заказ?")
+        if reply == QMessageBox.StandardButton.Yes:
             if self.database.delete_order(self.order_data['id']):
                 Messages.send_I_message("Заказ успешно удален!")
                 self.go_back_to_orders_window()

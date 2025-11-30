@@ -77,6 +77,11 @@ QWidget {
     border: 1px solid black;
 }
 
+#header_widget QWidget {
+    background: none;
+    border: none;
+}
+
 #sale_widget {
     border: 1px solid black;
     background: white;

@@ -51,7 +51,7 @@ class UpdateCardFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -114,7 +114,7 @@ class UpdateCardFrame(QFrame):
         try:
             self.item_data = self.database.take_item_single_info()
             if not self.item_data:
-                Messages.send_C_message("Товар не найден!")
+                Messages.send_C_message("Товар не найден!", "Ошибка загрузки")
                 self.go_back_to_home_window()
                 return
             
@@ -122,7 +122,8 @@ class UpdateCardFrame(QFrame):
             self.update_picture_preview()
             
         except Exception as e:
-            Messages.send_C_message(f"Ошибка загрузки данных товара: {str(e)}")
+            Messages.send_C_message(f"Ошибка загрузки данных товара: {str(e)}", 
+                                "Ошибка загрузки данных")
 
     def create_input_fields(self):
         """Создает поля для редактирования"""
@@ -320,28 +321,24 @@ class UpdateCardFrame(QFrame):
                         num_value = int(value) if value else 0
                     
                     if num_value < 0:
-                        Messages.send_C_message(f"Поле '{key}' не может быть отрицательным!")
-                        return None
+                        Messages.send_W_message(f"Поле '{key}' не может быть отрицательным! Установлено значение 0.", 
+                                            "Проверка данных")
+                        num_value = 0
                     data.append(str(num_value))
                 except ValueError:
-                    Messages.send_C_message(f"Введите корректное значение для '{key}'!")
-                    return None
-            else:
-                if not value and key in ['name', 'category', 'unit', 'deliveryman', 'creator']:
-                    Messages.send_C_message(f"Заполните поле '{key}'!")
-                    return None
-                data.append(value)
-
-        return data
+                    Messages.send_W_message(f"Некорректное значение для '{key}'. Использовано значение по умолчанию.", 
+                                        "Проверка данных")
+                    data.append("0" if key != 'cost' else "0.00")
 
     def delete_item(self):
         """Удаляет товар"""
         # Проверяем, используется ли товар в заказах
         if self.database.check_product_in_orders(self.item_data['article']):
-            Messages.send_C_message("Невозможно удалить товар! Он используется в заказах.")
+            Messages.send_C_message("Невозможно удалить товар! Он используется в заказах.", "Ошибка удаления")
             return
 
-        if Messages.send_I_message("Вы точно хотите удалить этот товар?") < 20000:
+        if Messages.send_I_message("Вы точно хотите удалить этот товар?", 
+                                "Подтверждение удаления") < 20000:
             if self.database.delete_item(self.item_data['article']):
                 # Удаляем фото товара
                 picture_name = self.item_data.get('picture', '')
@@ -350,10 +347,10 @@ class UpdateCardFrame(QFrame):
                     if os.path.exists(picture_path):
                         os.remove(picture_path)
                 
-                Messages.send_I_message("Товар успешно удален!")
+                Messages.send_I_message("Товар успешно удален!", "Успех")
                 self.controller.switch_window(HomePageWindow.HomeFrame)
             else:
-                Messages.send_C_message("Ошибка удаления товара!")
+                Messages.send_C_message("Ошибка удаления товара!", "Ошибка")
 
     def go_back_to_home_window(self):
         if Messages.send_I_message("Вы точно хотите прекратить редактирование?") < 20000:

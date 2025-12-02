@@ -90,7 +90,7 @@ class HomeFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -244,13 +244,12 @@ class HomeFrame(QFrame):
             item_card.setMaximumHeight(300)
             item_card_hbox = QHBoxLayout(item_card)
 
-            # Устанавливаем стили для подсветки
+            # Устанавливаем стили для подсветки КАРТОЧКИ
             if item['sale'] > 15:
-                item_card.setStyleSheet("background-color: #2E8B57;")  # Зеленый для скидки >15%
-            elif item['count'] == 0:
-                item_card.setStyleSheet("background-color: #87CEEB;")  # Голубой для отсутствия товара
+                # Если скидка >15% - вся карточка зеленая
+                item_card.setStyleSheet("background-color: #2E8B57")
             else:
-                item_card.setStyleSheet("background-color: white;")  # Белый по умолчанию
+                item_card.setStyleSheet("background-color: white")
 
             # Кнопка редактирования
             update_button = QPushButton()
@@ -321,14 +320,29 @@ class HomeFrame(QFrame):
 
             information_vbox.addWidget(unit_label)
 
+            # Строка "Количество на складе" - подсвечивается голубым если товара нет
             count_label = QLabel(f"Количество на складе: {item['count']}")
             count_label.setObjectName("cardText")
             count_label.setWordWrap(True)
-            # Подсветка для отсутствующего товара уже в основном фоне карточки
+            
+            # Если товара нет на складе, подсвечиваем только эту строку голубым
+            if item['count'] == 0:
+                count_label.setStyleSheet("""
+                    font-size: 20px;
+                    color: black;
+                    background-color: #87CEEB;
+                    padding: 2px;
+                    """)
+            else:
+                count_label.setStyleSheet("font-size: 20px; color: black; background: none;")
+            
             information_vbox.addWidget(count_label)
 
             item_card_hbox.addWidget(update_button)
-            item_card_hbox.addWidget(self.create_discount_widget(str(item['sale'])))
+            
+            # Виджет скидки
+            discount_widget = self.create_discount_widget(str(item['sale']))
+            item_card_hbox.addWidget(discount_widget)
 
             cards_container_layout.addWidget(item_card)
 
@@ -410,7 +424,8 @@ class HomeFrame(QFrame):
 
     def go_back_to_log_in_window(self):
         """ Обработчик нажатий на кнопку возврата на главное окно """
-        if Messages.send_I_message("Вы точно хотите вернуться в окно авторизации?") < 20000:
+        if Messages.send_I_message("Вы точно хотите вернуться в окно авторизации?", 
+                                "Подтверждение выхода") < 20000:
             # Очищаем данные пользователя перед выходом
             Storage.set_user_login(None)
             Storage.set_user_role(None)

@@ -3,6 +3,8 @@ from PySide6.QtWidgets import (QApplication,
 import sys
 from DATABASE import Database
 import styles
+import os
+from PySide6.QtGui import QIcon
 
 # Добавление класса с фреймом авторизации
 from FRAMES import LogInWindow
@@ -10,7 +12,7 @@ from FRAMES import LogInWindow
 
 class MainApplicationClass(QMainWindow):
     def __init__(self):
-        # Подключени конструктора от "Родителя"
+        # Подключение конструктора от "Родителя"
         super().__init__()
         # Установка названия Приложения
         self.setWindowTitle("Обувь")
@@ -21,10 +23,8 @@ class MainApplicationClass(QMainWindow):
         # Создание подключения к базе данных
         self.db = Database.DatabaseConnection()
 
-        # Объявление первого фрейма
-        log_in_frame = LogInWindow.LogInFrame(
-            controller=self
-        )
+        # Объявление первого фрейма - передаем self как controller
+        log_in_frame = LogInWindow.LogInFrame(controller=self)
 
         self.frame_container = QStackedWidget()
         # Добавление первого фрейма в контейнер (чтобы он выводился при запуске окна)
@@ -59,6 +59,22 @@ class MainApplicationClass(QMainWindow):
 
 
 application = QApplication(sys.argv)
+
+# Устанавливаем иконку для всего приложения
+try:
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_path = os.path.join(current_file_dir, "ICONS", "Icon.jpg")
+    
+    if os.path.exists(icon_path):
+        app_icon = QIcon(icon_path)
+        # Устанавливаем иконку для всего приложения
+        application.setWindowIcon(app_icon)
+        print(f"Иконка приложения установлена: {icon_path}")
+    else:
+        print(f"Иконка не найдена по пути: {icon_path}")
+except Exception as e:
+    print(f"Ошибка установки иконки приложения: {e}")
+
 # Подключение всех стилей
 application.setFont("Times New Roman")  # Установка шрифта для ВСЕГО приложения
 application.setStyleSheet(styles.styles_sheet)  # Установка стилей для приложения

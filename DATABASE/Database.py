@@ -152,9 +152,10 @@ class DatabaseConnection:
             return []
 
     def search_and_filter_items(self,
-                                search_text: str = "",
-                                company_filter: str = "",
-                                sort_by_count: bool = False):
+        search_text: str = "",
+        company_filter: str = "",
+        sort_by_count: bool = False,
+        sort_ascending: bool = True):  # Добавляем параметр направления
         try:
             query = """
                 SELECT 
@@ -175,11 +176,10 @@ class DatabaseConnection:
                     "item_deliveryman ILIKE %s",
                     "item_creator ILIKE %s",
                     "item_category ILIKE %s",
-                    "item_information ILIKE %s",
-                    "item_picture ILIKE %s"
+                    "item_information ILIKE %s"                  
                 ])
                 query += f" AND ({like_clause})"
-                params.extend([f"%{search_text}%"] * 8)
+                params.extend([f"%{search_text}%"] * 7)  # 7 полей для поиска
 
             # Фильтр по поставщику
             if company_filter and company_filter != "Все поставщики":
@@ -188,7 +188,10 @@ class DatabaseConnection:
 
             # Сортировка
             if sort_by_count:
-                query += " ORDER BY item_count DESC"  # от большего к меньшему
+                if sort_ascending:
+                    query += " ORDER BY item_count ASC"  # по возрастанию
+                else:
+                    query += " ORDER BY item_count DESC"  # по убыванию
             else:
                 query += " ORDER BY item_name"  # по умолчанию — по названию
 

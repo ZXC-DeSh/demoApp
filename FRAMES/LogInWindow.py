@@ -79,15 +79,18 @@ class LogInFrame(QFrame):
         # tjde7c@yahoo.com YOyhfR -- Менеджер
         # 4np6se@mail.com AtnDjr -- Клиент
         print(f"login: {self.login_edit.text()}\npassword: {self.password_edit.text()}")
-        if self.database.check_user_login_password(user_login=self.login_edit.text(),
-                                                   user_password=self.password_edit.text()):
+        if not self.login_edit.text().strip() or not self.password_edit.text().strip():
+            Messages.send_W_message("Заполните все поля для входа!", "Внимание")
+            return
+    
+        if self.database.check_user_login_password(user_login=self.login_edit.text(), user_password=self.password_edit.text()):
             # Если вернулось true:
             print("Пользователь существует")
             # Переход в новое окно
             self.controller.switch_window(HomePageWindow.HomeFrame)
         else:
             # Отправка сообщения об ошибке
-            Messages.send_C_message("Ошибка входа! Проверьте Логин и Пароль!")
+            Messages.send_C_message("Ошибка входа! Проверьте Логин и Пароль!", "Ошибка авторизации")
 
     def guest_enter(self):
         """ Обработчик нажатия на кнопку guest_button """

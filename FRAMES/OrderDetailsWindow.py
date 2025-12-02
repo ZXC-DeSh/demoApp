@@ -48,7 +48,7 @@ class OrderDetailsFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип

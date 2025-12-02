@@ -9,6 +9,7 @@ from FRAMES import HomePageWindow
 from StaticStorage import Storage
 import os
 import shutil
+import time
 
 
 class CreateCardFrame(QFrame):
@@ -28,7 +29,7 @@ class CreateCardFrame(QFrame):
         """Генерация интерфейса"""
         # Проверяем права доступа
         if Storage.get_user_role() != "Администратор":
-            Messages.send_C_message("Недостаточно прав для создания товаров!")
+            Messages.send_C_message("Недостаточно прав для создания товаров!", "Ошибка доступа")
             self.controller.switch_window(HomePageWindow.HomeFrame)
             return
 
@@ -56,7 +57,7 @@ class CreateCardFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -212,7 +213,7 @@ class CreateCardFrame(QFrame):
 
             # Проверяем уникальность артикула
             if not self.check_article_unique(user_input[0]):
-                Messages.send_C_message("Товар с таким артикулом уже существует!")
+                Messages.send_C_message("Товар с таким артикулом уже существует!", "Ошибка создания")
                 return
 
             # Обрабатываем фото
@@ -225,13 +226,13 @@ class CreateCardFrame(QFrame):
 
             # Сохраняем в БД
             if self.database.create_new_card(user_input, picture_name):
-                Messages.send_I_message("Товар успешно создан!")
+                Messages.send_I_message("Товар успешно создан!", "Успех")
                 self.controller.switch_window(HomePageWindow.HomeFrame)
             else:
-                Messages.send_C_message("Ошибка создания товара!")
+                Messages.send_C_message("Ошибка создания товара!", "Ошибка")
 
         except Exception as e:
-            Messages.send_C_message(f"Ошибка создания товара: {str(e)}")
+            Messages.send_C_message(f"Ошибка создания товара: {str(e)}", "Ошибка создания")
 
     def collect_input_data(self):
         """Собирает и валидирует данные из полей ввода"""
@@ -241,15 +242,17 @@ class CreateCardFrame(QFrame):
         article_field = self.input_fields['article']
         article = article_field.text().strip()
         if not article:
-            Messages.send_C_message("Введите артикул товара!")
-            return None
+            Messages.send_W_message("Рекомендуется указать артикул товара. Поле будет заполнено автоматически.", 
+                                "Рекомендация")
+            # Генерируем артикул автоматически
+            article = f"ART_{int(time.time()) % 1000000}"
         data.append(article)
 
         # Наименование
         name_field = self.input_fields['name']
         name = name_field.text().strip()
         if not name:
-            Messages.send_C_message("Введите наименование товара!")
+            Messages.send_W_message("Введите наименование товара!", "Обязательное поле")
             return None
         data.append(name)
 

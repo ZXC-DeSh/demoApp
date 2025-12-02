@@ -48,7 +48,7 @@ class OrdersCardsFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -245,7 +245,7 @@ class OrdersCardsFrame(QFrame):
         self.controller.switch_window(OrderDetailsWindow.OrderDetailsFrame)
 
     def go_back_to_home_window(self):
-        if Messages.send_I_message("Вы точно хотите прекратить редактирование?") < 20000:
+        if Messages.send_I_message("Вы точно хотите прекратить редактирование?", "Подтверждение выхода") < 20000:
             # Очищаем временные данные
             Storage.set_item_id(None)
             Storage.set_order_id(None)

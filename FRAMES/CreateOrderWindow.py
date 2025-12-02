@@ -53,7 +53,7 @@ class CreateOrderFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -236,7 +236,7 @@ class CreateOrderFrame(QFrame):
             # Получаем выбранный товар
             current_index = self.product_combo.currentIndex()
             if current_index < 0:
-                Messages.send_C_message("Выберите товар!")
+                Messages.send_C_message("Выберите товар!", "Ошибка")
                 return
 
             product_article = self.product_combo.itemData(current_index)

@@ -52,7 +52,7 @@ class UpdateOrderFrame(QFrame):
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(logo_pixmap)
         else:
             # Если файл не найден, показываем текстовый логотип
@@ -108,7 +108,7 @@ class UpdateOrderFrame(QFrame):
             self.order_items = self.database.get_order_items_with_prices(self.order_data['id'])
             
         except Exception as e:
-            Messages.send_C_message(f"Ошибка загрузки данных заказа: {str(e)}")
+            Messages.send_C_message(f"Ошибка загрузки данных заказа: {str(e)}", "Ошибка загрузки")
             import traceback
             traceback.print_exc()
 

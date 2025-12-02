@@ -18,7 +18,16 @@ class CreateCardFrame(QFrame):
         self.controller = controller
         self.database = controller.db
 
-        self.ICONS_DIR = "/home/neoleg/Documents/Demka3Kurs/Demoexam2026/ICONS"
+        # Получаем путь к папке ICONS динамически
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)  # Поднимаемся из FRAMES в корень
+        self.ICONS_DIR = os.path.join(project_root, "ICONS")
+        
+        # Создаем папку ICONS если она не существует
+        if not os.path.exists(self.ICONS_DIR):
+            os.makedirs(self.ICONS_DIR)
+            print(f"Создана папка для изображений: {self.ICONS_DIR}")
+        
         self.new_picture_path = None
         self.input_fields = {}  # Храним ссылки на поля ввода
 
@@ -29,7 +38,8 @@ class CreateCardFrame(QFrame):
         """Генерация интерфейса"""
         # Проверяем права доступа
         if Storage.get_user_role() != "Администратор":
-            Messages.send_C_message("Недостаточно прав для создания товаров!", "Ошибка доступа")
+            Messages.send_C_message("Недостаточно прав для создания товаров!", 
+                                  "Ошибка доступа")
             self.controller.switch_window(HomePageWindow.HomeFrame)
             return
 
@@ -93,7 +103,7 @@ class CreateCardFrame(QFrame):
 
         # Фото
         self.picture_label = QLabel()
-        self.picture_label.setFixedSize(200, 200)
+        self.picture_label.setFixedSize(300, 200)  # Размер 300x200 для отображения
         self.picture_label.setStyleSheet("border: 1px solid gray;")
         self.picture_label.setText("Фото не выбрано")
         self.picture_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -183,25 +193,37 @@ class CreateCardFrame(QFrame):
     def select_new_photo(self):
         """Выбор нового фото"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Выберите фото", "", "Изображения (*.png *.jpg *.jpeg *.bmp *.gif)"
+            self, "Выберите фото", "", 
+            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if file_path:
-            # Проверяем размер изображения
             try:
                 with Image.open(file_path) as img:
+                    # Проверяем и изменяем размер изображения до 300x200
                     if img.size != (300, 200):
                         img = img.resize((300, 200), Image.Resampling.LANCZOS)
-                        img.save(file_path)
+                        
+                        # Сохраняем во временный файл с правильным размером
+                        temp_dir = os.path.join(os.path.dirname(self.ICONS_DIR), "temp")
+                        if not os.path.exists(temp_dir):
+                            os.makedirs(temp_dir)
+                        temp_path = os.path.join(temp_dir, "temp_resized_image.jpg")
+                        img.save(temp_path, quality=85)
+                        
+                        self.new_picture_path = temp_path
+                    else:
+                        self.new_picture_path = file_path
+                
+                # Показываем превью
+                pixmap = QPixmap(self.new_picture_path)
+                self.picture_label.setPixmap(pixmap.scaled(
+                    300, 200, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+                
             except Exception as e:
-                Messages.send_C_message(f"Ошибка обработки изображения: {str(e)}")
+                Messages.send_C_message(f"Ошибка обработки изображения: {str(e)}", "Ошибка")
                 return
-            
-            self.new_picture_path = file_path
-            pixmap = QPixmap(file_path)
-            self.picture_label.setPixmap(pixmap.scaled(
-                self.picture_label.width(), self.picture_label.height(),
-                Qt.AspectRatioMode.KeepAspectRatio
-            ))
 
     def save_new_product(self):
         """Создает новый товар"""
@@ -213,16 +235,35 @@ class CreateCardFrame(QFrame):
 
             # Проверяем уникальность артикула
             if not self.check_article_unique(user_input[0]):
-                Messages.send_C_message("Товар с таким артикулом уже существует!", "Ошибка создания")
+                Messages.send_C_message("Товар с таким артикулом уже существует!", 
+                                      "Ошибка создания")
                 return
 
             # Обрабатываем фото
-            picture_name = ""
+            picture_name = "picture.png"  # По умолчанию заглушка
             if self.new_picture_path:
+                # Получаем расширение файла
                 _, ext = os.path.splitext(self.new_picture_path)
-                picture_name = f"{user_input[0]}{ext}"
+                if not ext or ext == '':
+                    ext = '.jpg'
+                
+                # Создаем имя файла на основе артикула
+                article = user_input[0]
+                picture_name = f"{article}{ext}"
                 new_full_path = os.path.join(self.ICONS_DIR, picture_name)
-                shutil.copy2(self.new_picture_path, new_full_path)
+
+                # Копируем новое фото
+                try:
+                    shutil.copy2(self.new_picture_path, new_full_path)
+                    print(f"Сохранено фото товара: {new_full_path}")
+                    
+                    # Удаляем временный файл если он был создан
+                    if "temp" in self.new_picture_path:
+                        os.remove(self.new_picture_path)
+                        
+                except Exception as e:
+                    Messages.send_C_message(f"Ошибка сохранения фото: {str(e)}", "Ошибка")
+                    return
 
             # Сохраняем в БД
             if self.database.create_new_card(user_input, picture_name):
@@ -243,7 +284,7 @@ class CreateCardFrame(QFrame):
         article = article_field.text().strip()
         if not article:
             Messages.send_W_message("Рекомендуется указать артикул товара. Поле будет заполнено автоматически.", 
-                                "Рекомендация")
+                                  "Рекомендация")
             # Генерируем артикул автоматически
             article = f"ART_{int(time.time()) % 1000000}"
         data.append(article)
@@ -252,7 +293,7 @@ class CreateCardFrame(QFrame):
         name_field = self.input_fields['name']
         name = name_field.text().strip()
         if not name:
-            Messages.send_W_message("Введите наименование товара!", "Обязательное поле")
+            Messages.send_C_message("Введите наименование товара!", "Обязательное поле")
             return None
         data.append(name)
 
@@ -260,7 +301,7 @@ class CreateCardFrame(QFrame):
         category_field = self.input_fields['category']
         category = category_field.currentText() if category_field.currentText() else ""
         if not category:
-            Messages.send_C_message("Выберите категорию товара!")
+            Messages.send_C_message("Выберите категорию товара!", "Обязательное поле")
             return None
         data.append(category)
 
@@ -270,11 +311,11 @@ class CreateCardFrame(QFrame):
         try:
             cost = float(cost_text.replace(',', '.')) if cost_text else 0.0
             if cost < 0:
-                Messages.send_C_message("Стоимость не может быть отрицательной!")
+                Messages.send_C_message("Стоимость не может быть отрицательной!", "Ошибка")
                 return None
             data.append(str(cost))
         except ValueError:
-            Messages.send_C_message("Введите корректную стоимость!")
+            Messages.send_C_message("Введите корректную стоимость!", "Ошибка")
             return None
 
         # Остальные поля
@@ -299,15 +340,15 @@ class CreateCardFrame(QFrame):
                 try:
                     num_value = int(value) if value else 0
                     if num_value < 0:
-                        Messages.send_C_message(f"{field_name} не может быть отрицательной!")
+                        Messages.send_C_message(f"{field_name} не может быть отрицательной!", "Ошибка")
                         return None
                     data.append(str(num_value))
                 except ValueError:
-                    Messages.send_C_message(f"Введите корректное значение для {field_name}!")
+                    Messages.send_C_message(f"Введите корректное значение для {field_name}!", "Ошибка")
                     return None
             else:
                 if not value and field_key in ['deliveryman', 'creator', 'unit']:
-                    Messages.send_C_message(f"Заполните поле '{field_name}'!")
+                    Messages.send_C_message(f"Заполните поле '{field_name}'!", "Ошибка")
                     return None
                 data.append(value)
 
@@ -326,7 +367,8 @@ class CreateCardFrame(QFrame):
             return True
 
     def go_back_to_home_window(self):
-        if Messages.send_I_message("Вы точно хотите прекратить редактирование?") < 20000:
+        if Messages.send_I_message("Вы точно хотите прекратить редактирование?", 
+                                 "Подтверждение выхода") < 20000:
             # Очищаем временные данные
             Storage.set_item_id(None)
             Storage.set_order_id(None)

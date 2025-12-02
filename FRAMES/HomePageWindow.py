@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (QFrame, QPushButton, QHBoxLayout, QLineEdit, QCheckBox,
-                               QComboBox, QWidget, QVBoxLayout, QLabel, QScrollArea)
+                               QComboBox, QWidget, QVBoxLayout, QLabel, QScrollArea,
+                               QRadioButton, QButtonGroup)  # Добавляем QRadioButton и QButtonGroup
 from PySide6.QtGui import QPixmap, QPalette  # Для фоток
 from PySide6.QtCore import Qt, QTimer
 import Messages
@@ -28,7 +29,9 @@ class HomeFrame(QFrame):
         # Виджеты для поиска и фильтрации
         self.search_edit = None
         self.company_combo = None
-        self.sort_by_count_checkbox = None
+        self.sort_asc_radio = None  # Сортировка по возрастанию
+        self.sort_desc_radio = None  # Сортировка по убыванию
+        self.sort_button_group = None  # Группа кнопок сортировки
 
         # Создание разметки окна, в которую будет добавляться весь интерфейс
         self.frame_layout = QVBoxLayout(self)
@@ -47,14 +50,27 @@ class HomeFrame(QFrame):
         # Сбор всех данных для корректной перезаписи
         search_text = self.search_edit.text().strip() if self.search_edit else ""
         company = self.company_combo.currentText() if self.company_combo else ""
-        sort_by_count = self.sort_by_count_checkbox.isChecked() if self.sort_by_count_checkbox else False
+        
+        # Получаем параметры сортировки
+        sort_by_count = False
+        sort_ascending = True  # По умолчанию сортировка по возрастанию
+        
+        if self.sort_button_group:
+            if self.sort_desc_radio and self.sort_desc_radio.isChecked():
+                sort_by_count = True
+                sort_ascending = False
+            elif self.sort_asc_radio and self.sort_asc_radio.isChecked():
+                sort_by_count = True
+                sort_ascending = True
+        
         # Выполняем запрос в основном потоке
         try:
             # Получение списка с учетом всех вводных
             items = self.database.search_and_filter_items(
                 search_text=search_text,
                 company_filter=company,
-                sort_by_count=sort_by_count
+                sort_by_count=sort_by_count,
+                sort_ascending=sort_ascending  # Передаем направление сортировки
             )
             # Отправка команды на перезапись
             self.update_items_display(items)
@@ -188,21 +204,47 @@ class HomeFrame(QFrame):
         widget = QWidget()
         layout = QHBoxLayout(widget)
 
-        self.sort_by_count_checkbox = QCheckBox("Сортировать по количеству на складе")
-        self.sort_by_count_checkbox.stateChanged.connect(self.on_any_change)
-        layout.addWidget(self.sort_by_count_checkbox)
+        # Надпись "Сортировать по количеству на складе"
+        sort_label = QLabel("Сортировать по количеству на складе:")
+        sort_label.setObjectName("UpdateTextHint")
+        layout.addWidget(sort_label)
+        
+        # Радиокнопки для выбора направления сортировки
+        self.sort_asc_radio = QRadioButton("↑ Возрастание")
+        self.sort_desc_radio = QRadioButton("↓ Убывание")
+        
+        # Создаем группу кнопок
+        self.sort_button_group = QButtonGroup()
+        self.sort_button_group.addButton(self.sort_asc_radio)
+        self.sort_button_group.addButton(self.sort_desc_radio)
+        
+        # Ничего не выбрано по умолчанию
+        self.sort_asc_radio.setChecked(False)
+        self.sort_desc_radio.setChecked(False)
+        
+        # Подключаем изменение сортировки
+        self.sort_asc_radio.toggled.connect(self.on_any_change)
+        self.sort_desc_radio.toggled.connect(self.on_any_change)
+        
+        layout.addWidget(self.sort_asc_radio)
+        layout.addWidget(self.sort_desc_radio)
         layout.addStretch()
+        
         self.frame_layout.addWidget(widget)
 
     def create_search_block(self):
         """ Метод для создания поля для поиска """
         widget = QWidget()
         layout = QHBoxLayout(widget)
+        
+        # Подсказка
+        layout.addWidget(QLabel("Поиск:", objectName="UpdateTextHint"))
+        
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Поиск...")
         self.search_edit.setObjectName("search_edit")
         self.search_edit.textChanged.connect(self.on_any_change)
         layout.addWidget(self.search_edit)
+        
         self.frame_layout.addWidget(widget)
 
     def update_items_display(self, items_list):
@@ -224,14 +266,27 @@ class HomeFrame(QFrame):
         deliveryman = self.database.take_all_deliveryman()  # Список поставщиков из Таблицы
         self.company_combo.addItems(deliveryman)
 
-        self.company_combo.currentIndexChanged.connect(self.on_any_change)
-        layout.addWidget(QLabel("Поставщик:"))
+        # Подключаем обработчик с проверкой на "Все поставщики"
+        self.company_combo.currentIndexChanged.connect(self.on_company_filter_changed)
+        
+        layout.addWidget(QLabel("Поставщик:", objectName="UpdateTextHint"))
         layout.addWidget(self.company_combo)
         layout.addStretch()
+        
         self.frame_layout.addWidget(widget)
 
-        layout.addStretch()
-        self.frame_layout.addWidget(widget)
+    def on_company_filter_changed(self, index):
+        """Обработчик изменения фильтра по поставщику"""
+        # Если выбрано "Все поставщики" (первый элемент), сбрасываем сортировку
+        if index == 0:
+            # Сбрасываем радиокнопки сортировки
+            if self.sort_asc_radio:
+                self.sort_asc_radio.setChecked(False)
+            if self.sort_desc_radio:
+                self.sort_desc_radio.setChecked(False)
+        
+        # Всегда обновляем отображение
+        self.on_any_change()
 
     def create_items_cards_from_list(self, items_list):
         """Создаёт виджет с карточками из переданного списка"""

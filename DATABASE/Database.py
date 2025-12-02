@@ -155,7 +155,7 @@ class DatabaseConnection:
         search_text: str = "",
         company_filter: str = "",
         sort_by_count: bool = False,
-        sort_ascending: bool = True):  # Добавляем параметр направления
+        sort_ascending: bool = True):
         try:
             query = """
                 SELECT 
@@ -169,17 +169,29 @@ class DatabaseConnection:
 
             # Поиск по тексту (регистронезависимо в PostgreSQL — ILIKE)
             if search_text:
-                like_clause = " OR ".join([
-                    "item_article ILIKE %s",
-                    "item_name ILIKE %s",
-                    "item_edinica ILIKE %s",
-                    "item_deliveryman ILIKE %s",
-                    "item_creator ILIKE %s",
-                    "item_category ILIKE %s",
-                    "item_information ILIKE %s"                  
-                ])
-                query += f" AND ({like_clause})"
-                params.extend([f"%{search_text}%"] * 7)  # 7 полей для поиска
+                # Разбиваем строку поиска на отдельные слова
+                search_words = search_text.split()
+                
+                conditions = []
+                # Для каждого слова создаем условия поиска по всем полям
+                for word in search_words:
+                    if word.strip():  # Проверяем, что слово не пустое
+                        word_conditions = [
+                            "item_article ILIKE %s",
+                            "item_name ILIKE %s", 
+                            "item_edinica ILIKE %s",
+                            "item_deliveryman ILIKE %s",
+                            "item_creator ILIKE %s",
+                            "item_category ILIKE %s",
+                            "item_information ILIKE %s"
+                        ]
+                        conditions.append(f"({' OR '.join(word_conditions)})")
+                        # Добавляем слово с % для каждого поля (7 полей)
+                        params.extend([f"%{word}%"] * 7)
+                
+                if conditions:
+                    # Объединяем условия через AND (все слова должны встречаться где-то в записи)
+                    query += f" AND ({' AND '.join(conditions)})"
 
             # Фильтр по поставщику
             if company_filter and company_filter != "Все поставщики":

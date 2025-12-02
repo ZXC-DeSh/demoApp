@@ -17,7 +17,16 @@ class UpdateCardFrame(QFrame):
         self.controller = controller
         self.database = controller.db
 
-        self.ICONS_DIR = "/home/neoleg/Documents/Demka3Kurs/Demoexam2026/ICONS"
+        # Получаем путь к папке ICONS динамически
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_file_dir)  # Поднимаемся из FRAMES в корень
+        self.ICONS_DIR = os.path.join(project_root, "ICONS")
+        
+        # Создаем папку ICONS если она не существует
+        if not os.path.exists(self.ICONS_DIR):
+            os.makedirs(self.ICONS_DIR)
+            print(f"Создана папка для изображений: {self.ICONS_DIR}")
+        
         self.new_picture_path = None
         self.item_data = {}
         self.input_fields = {}  # Храним ссылки на поля ввода
@@ -85,7 +94,7 @@ class UpdateCardFrame(QFrame):
 
         # Фото
         self.picture_label = QLabel()
-        self.picture_label.setFixedSize(200, 200)
+        self.picture_label.setFixedSize(300, 200)  # Установим размер 300x200 для отображения
         self.picture_label.setStyleSheet("border: 1px solid gray;")
         self.frame_layout.addWidget(self.picture_label)
 
@@ -122,8 +131,7 @@ class UpdateCardFrame(QFrame):
             self.update_picture_preview()
             
         except Exception as e:
-            Messages.send_C_message(f"Ошибка загрузки данных товара: {str(e)}", 
-                                "Ошибка загрузки данных")
+            Messages.send_C_message(f"Ошибка загрузки данных товара: {str(e)}", "Ошибка загрузки")
 
     def create_input_fields(self):
         """Создает поля для редактирования"""
@@ -218,14 +226,20 @@ class UpdateCardFrame(QFrame):
     def update_picture_preview(self):
         """Обновляет превью фото"""
         picture_name = self.item_data.get('picture', '')
-        full_path = os.path.join(self.ICONS_DIR, picture_name) if picture_name else os.path.join(self.ICONS_DIR, "picture.png")
+        
+        # Определяем путь к изображению
+        if picture_name and picture_name != "picture.png":
+            full_path = os.path.join(self.ICONS_DIR, picture_name)
+        else:
+            full_path = os.path.join(self.ICONS_DIR, "picture.png")
         
         if os.path.exists(full_path):
             pixmap = QPixmap(full_path)
             if not pixmap.isNull():
+                # Масштабируем изображение для отображения в 300x200
                 self.picture_label.setPixmap(pixmap.scaled(
-                    self.picture_label.width(), self.picture_label.height(),
-                    Qt.AspectRatioMode.KeepAspectRatio
+                    300, 200, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
                 ))
             else:
                 self.set_placeholder_image()
@@ -240,25 +254,37 @@ class UpdateCardFrame(QFrame):
     def select_new_photo(self):
         """Выбор нового фото"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Выберите фото", "", "Изображения (*.png *.jpg *.jpeg *.bmp *.gif)"
+            self, "Выберите фото", "", 
+            "Изображения (*.png *.jpg *.jpeg *.bmp *.gif)"
         )
         if file_path:
-            # Проверяем и изменяем размер изображения
             try:
                 with Image.open(file_path) as img:
+                    # Проверяем и изменяем размер изображения до 300x200
                     if img.size != (300, 200):
                         img = img.resize((300, 200), Image.Resampling.LANCZOS)
-                        img.save(file_path)
+                        
+                        # Сохраняем во временный файл с правильным размером
+                        temp_dir = os.path.join(os.path.dirname(self.ICONS_DIR), "temp")
+                        if not os.path.exists(temp_dir):
+                            os.makedirs(temp_dir)
+                        temp_path = os.path.join(temp_dir, "temp_resized_image.jpg")
+                        img.save(temp_path, quality=85)
+                        
+                        self.new_picture_path = temp_path
+                    else:
+                        self.new_picture_path = file_path
+                
+                # Показываем превью
+                pixmap = QPixmap(self.new_picture_path)
+                self.picture_label.setPixmap(pixmap.scaled(
+                    300, 200, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                ))
+                
             except Exception as e:
-                Messages.send_C_message(f"Ошибка обработки изображения: {str(e)}")
+                Messages.send_C_message(f"Ошибка обработки изображения: {str(e)}", "Ошибка")
                 return
-            
-            self.new_picture_path = file_path
-            pixmap = QPixmap(file_path)
-            self.picture_label.setPixmap(pixmap.scaled(
-                self.picture_label.width(), self.picture_label.height(),
-                Qt.AspectRatioMode.KeepAspectRatio
-            ))
 
     def save_changes(self):
         """Сохраняет изменения товара"""
@@ -268,31 +294,57 @@ class UpdateCardFrame(QFrame):
                 return
 
             # Обрабатываем фото
-            new_filename = self.item_data.get('picture', '')
+            new_filename = ""
             if self.new_picture_path:
+                # Получаем расширение файла
                 _, ext = os.path.splitext(self.new_picture_path)
-                new_filename = f"{self.item_data['article']}{ext}"
+                if not ext or ext == '':
+                    ext = '.jpg'
+                
+                # Создаем имя файла на основе артикула
+                article = self.item_data.get('article', '')
+                if not article:
+                    article = user_input[0]  # Берем артикул из ввода
+                
+                new_filename = f"{article}{ext}"
                 new_full_path = os.path.join(self.ICONS_DIR, new_filename)
 
-                # Удаляем старое фото
+                # Удаляем старое фото, если оно не picture.png
                 old_filename = self.item_data.get('picture', '')
                 if old_filename and old_filename != "picture.png":
                     old_full_path = os.path.join(self.ICONS_DIR, old_filename)
                     if os.path.exists(old_full_path):
-                        os.remove(old_full_path)
+                        try:
+                            os.remove(old_full_path)
+                            print(f"Удалено старое фото: {old_full_path}")
+                        except Exception as e:
+                            print(f"Ошибка удаления старого фото: {e}")
 
                 # Копируем новое фото
-                shutil.copy2(self.new_picture_path, new_full_path)
+                try:
+                    shutil.copy2(self.new_picture_path, new_full_path)
+                    print(f"Сохранено новое фото: {new_full_path}")
+                    
+                    # Удаляем временный файл если он был создан
+                    if "temp" in self.new_picture_path:
+                        os.remove(self.new_picture_path)
+                        
+                except Exception as e:
+                    Messages.send_C_message(f"Ошибка сохранения фото: {str(e)}", "Ошибка")
+                    return
+            else:
+                # Если фото не меняли, оставляем старое
+                new_filename = self.item_data.get('picture', '')
 
             # Сохраняем в БД
             if self.database.update_card_picture(new_filename, user_input):
-                Messages.send_I_message("Товар успешно обновлен!")
+                Messages.send_I_message("Товар успешно обновлен!", "Успех")
                 self.controller.switch_window(HomePageWindow.HomeFrame)
             else:
-                Messages.send_C_message("Ошибка обновления товара!")
+                Messages.send_C_message("Ошибка обновления товара!", "Ошибка")
 
         except Exception as e:
-            Messages.send_C_message(f"Ошибка сохранения: {str(e)}")
+            Messages.send_C_message(f"Ошибка сохранения: {str(e)}", "Ошибка сохранения")
 
     def collect_input_data(self):
         """Собирает и валидирует данные"""
@@ -309,7 +361,7 @@ class UpdateCardFrame(QFrame):
             elif isinstance(field_widget, QLineEdit):
                 value = field_widget.text()
             else:
-                Messages.send_C_message(f"Неизвестный тип поля: {key}")
+                Messages.send_C_message(f"Неизвестный тип поля: {key}", "Ошибка")
                 return None
 
             # Валидация числовых полей
@@ -321,31 +373,41 @@ class UpdateCardFrame(QFrame):
                         num_value = int(value) if value else 0
                     
                     if num_value < 0:
-                        Messages.send_W_message(f"Поле '{key}' не может быть отрицательным! Установлено значение 0.", 
-                                            "Проверка данных")
-                        num_value = 0
+                        Messages.send_C_message(f"Поле '{key}' не может быть отрицательным!", "Ошибка")
+                        return None
                     data.append(str(num_value))
                 except ValueError:
-                    Messages.send_W_message(f"Некорректное значение для '{key}'. Использовано значение по умолчанию.", 
-                                        "Проверка данных")
-                    data.append("0" if key != 'cost' else "0.00")
+                    Messages.send_C_message(f"Введите корректное значение для '{key}'!", "Ошибка")
+                    return None
+            else:
+                if not value and key in ['name', 'category', 'unit', 'deliveryman', 'creator']:
+                    Messages.send_C_message(f"Заполните поле '{key}'!", "Ошибка")
+                    return None
+                data.append(value)
+
+        return data
 
     def delete_item(self):
         """Удаляет товар"""
         # Проверяем, используется ли товар в заказах
         if self.database.check_product_in_orders(self.item_data['article']):
-            Messages.send_C_message("Невозможно удалить товар! Он используется в заказах.", "Ошибка удаления")
+            Messages.send_C_message("Невозможно удалить товар! Он используется в заказах.", 
+                                  "Ошибка удаления")
             return
 
         if Messages.send_I_message("Вы точно хотите удалить этот товар?", 
-                                "Подтверждение удаления") < 20000:
+                                 "Подтверждение удаления") < 20000:
             if self.database.delete_item(self.item_data['article']):
-                # Удаляем фото товара
+                # Удаляем фото товара, если оно не заглушка
                 picture_name = self.item_data.get('picture', '')
                 if picture_name and picture_name != "picture.png":
                     picture_path = os.path.join(self.ICONS_DIR, picture_name)
                     if os.path.exists(picture_path):
-                        os.remove(picture_path)
+                        try:
+                            os.remove(picture_path)
+                            print(f"Удалено фото товара: {picture_path}")
+                        except Exception as e:
+                            print(f"Ошибка удаления фото: {e}")
                 
                 Messages.send_I_message("Товар успешно удален!", "Успех")
                 self.controller.switch_window(HomePageWindow.HomeFrame)
@@ -353,7 +415,8 @@ class UpdateCardFrame(QFrame):
                 Messages.send_C_message("Ошибка удаления товара!", "Ошибка")
 
     def go_back_to_home_window(self):
-        if Messages.send_I_message("Вы точно хотите прекратить редактирование?") < 20000:
+        if Messages.send_I_message("Вы точно хотите прекратить редактирование?", 
+                                 "Подтверждение выхода") < 20000:
             # Очищаем временные данные
             Storage.set_item_id(None)
             Storage.set_order_id(None)

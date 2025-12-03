@@ -267,13 +267,32 @@ class CreateCardFrame(QFrame):
 
             # Сохраняем в БД
             if self.database.create_new_card(user_input, picture_name):
+                # Обновляем список в главном окне
+                self.refresh_home_window_items()
+                
                 Messages.send_I_message("Товар успешно создан!", "Успех")
-                self.controller.switch_window(HomePageWindow.HomeFrame)
+                
+                # Задержка перед переходом
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(300, lambda: self.controller.switch_window(HomePageWindow.HomeFrame))
             else:
                 Messages.send_C_message("Ошибка создания товара!", "Ошибка")
 
         except Exception as e:
             Messages.send_C_message(f"Ошибка создания товара: {str(e)}", "Ошибка создания")
+
+    def refresh_home_window_items(self):
+        """Обновляет список товаров в главном окне"""
+        try:
+            # Получаем существующий фрейм главной страницы из кэша
+            home_frame = self.controller.frames_cache.get('HomeFrame')
+            if home_frame:
+                # Обновляем отображение товаров
+                items = self.database.get_all_items()
+                home_frame.update_items_display(items)
+                print("Главное окно обновлено после создания товара")
+        except Exception as e:
+            print(f"Ошибка обновления главного окна: {e}")
 
     def collect_input_data(self):
         """Собирает и валидирует данные из полей ввода"""

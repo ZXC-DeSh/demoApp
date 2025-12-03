@@ -329,6 +329,9 @@ class UpdateCardFrame(QFrame):
                     if "temp" in self.new_picture_path:
                         os.remove(self.new_picture_path)
                         
+                    # Сразу обновляем превью в интерфейсе
+                    self.update_picture_preview_from_path(new_full_path)
+                        
                 except Exception as e:
                     Messages.send_C_message(f"Ошибка сохранения фото: {str(e)}", "Ошибка")
                     return
@@ -336,55 +339,121 @@ class UpdateCardFrame(QFrame):
                 # Если фото не меняли, оставляем старое
                 new_filename = self.item_data.get('picture', '')
 
+            # Отладочная информация
+            print(f"Имя файла для БД: {new_filename}")
+            print(f"Данные для обновления: {user_input}")
+            print(f"ID товара: {Storage.get_item_id()}")
+
             # Сохраняем в БД
             if self.database.update_card_picture(new_filename, user_input):
+                # Обновляем данные о товаре
+                self.item_data['picture'] = new_filename
+                
+                # Форсируем обновление интерфейса главного окна
+                self.refresh_home_window_items()
+                
                 Messages.send_I_message("Товар успешно обновлен!", "Успех")
-                self.controller.switch_window(HomePageWindow.HomeFrame)
+                
+                # Небольшая задержка перед переходом
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(300, lambda: self.controller.switch_window(HomePageWindow.HomeFrame))
             else:
                 Messages.send_C_message("Ошибка обновления товара!", "Ошибка")
 
         except Exception as e:
             Messages.send_C_message(f"Ошибка сохранения: {str(e)}", "Ошибка сохранения")
 
+    def update_picture_preview_from_path(self, image_path):
+        """Обновляет превью фото из указанного пути"""
+        try:
+            if os.path.exists(image_path):
+                pixmap = QPixmap(image_path)
+                if not pixmap.isNull():
+                    # Масштабируем изображение для отображения в 300x200
+                    self.picture_label.setPixmap(pixmap.scaled(
+                        300, 200, Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    ))
+                    # Принудительно обновляем виджет
+                    self.picture_label.update()
+                    print(f"Превью обновлено из: {image_path}")
+                else:
+                    self.set_placeholder_image()
+            else:
+                self.set_placeholder_image()
+        except Exception as e:
+            print(f"Ошибка обновления превью: {e}")
+            self.set_placeholder_image()
+
+    def refresh_home_window_items(self):
+        """Обновляет список товаров в главном окне"""
+        try:
+            # Получаем существующий фрейм главной страницы из кэша
+            home_frame = self.controller.frames_cache.get('HomeFrame')
+            if home_frame:
+                # Обновляем отображение товаров
+                items = self.database.get_all_items()
+                home_frame.update_items_display(items)
+                print("Главное окно обновлено")
+        except Exception as e:
+            print(f"Ошибка обновления главного окна: {e}")
+
     def collect_input_data(self):
-        """Собирает и валидирует данные"""
+        """Собирает и валидирует данные из полей ввода для обновления"""
         data = []
         
-        # Пропускаем ID и артикул (первые 2 поля)
-        fields_to_process = list(self.input_fields.keys())[2:]
+        field_mapping = [
+            ('article', 'article'),
+            ('name', 'name'),
+            ('unit', 'edinica'),
+            ('cost', 'cost'),
+            ('deliveryman', 'deliveryman'),
+            ('creator', 'creator'),
+            ('category', 'category'),
+            ('sale', 'sale'),
+            ('count', 'count'),
+            ('information', 'information')
+        ]
         
-        for key in fields_to_process:
-            field_widget = self.input_fields[key]
+        for ui_field_key, db_field_key in field_mapping:
+            field_widget = self.input_fields.get(ui_field_key)
+            
+            if not field_widget:
+                print(f"Поле {ui_field_key} не найдено в input_fields!")
+                Messages.send_C_message(f"Ошибка: поле {ui_field_key} не найдено!", "Ошибка")
+                return None
             
             if isinstance(field_widget, QComboBox):
                 value = field_widget.currentText()
             elif isinstance(field_widget, QLineEdit):
                 value = field_widget.text()
             else:
-                Messages.send_C_message(f"Неизвестный тип поля: {key}", "Ошибка")
+                Messages.send_C_message(f"Неизвестный тип поля: {ui_field_key}", "Ошибка")
                 return None
 
             # Валидация числовых полей
-            if key in ['cost', 'count', 'sale']:
+            if ui_field_key in ['cost', 'count', 'sale']:
                 try:
-                    if key == 'cost':
+                    if ui_field_key == 'cost':
                         num_value = float(value.replace(',', '.')) if value else 0.0
                     else:
                         num_value = int(value) if value else 0
                     
                     if num_value < 0:
-                        Messages.send_C_message(f"Поле '{key}' не может быть отрицательным!", "Ошибка")
+                        Messages.send_C_message(f"Поле '{ui_field_key}' не может быть отрицательным!", "Ошибка")
                         return None
                     data.append(str(num_value))
                 except ValueError:
-                    Messages.send_C_message(f"Введите корректное значение для '{key}'!", "Ошибка")
+                    Messages.send_C_message(f"Введите корректное значение для '{ui_field_key}'!", "Ошибка")
                     return None
             else:
-                if not value and key in ['name', 'category', 'unit', 'deliveryman', 'creator']:
-                    Messages.send_C_message(f"Заполните поле '{key}'!", "Ошибка")
+                if not value and ui_field_key in ['name', 'category', 'unit', 'deliveryman', 'creator']:
+                    Messages.send_C_message(f"Заполните поле '{ui_field_key}'!", "Ошибка")
                     return None
                 data.append(value)
 
+        print(f"Собрано данных: {len(data)}")
+        print(f"Данные: {data}")
         return data
 
     def delete_item(self):

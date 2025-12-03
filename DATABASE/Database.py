@@ -293,8 +293,7 @@ class DatabaseConnection:
             self.connection.rollback()
             return {}
 
-    def update_card_picture(self, picture_name: str,
-                            user_input_data: list):
+    def update_card_picture(self, picture_name: str, user_input_data: list):
         """
         Обновление фотографии товара
         :param picture_name: Новое имя товара
@@ -302,6 +301,9 @@ class DatabaseConnection:
         :return: Bool
         """
         try:
+            # Восстанавливаем соединение
+            self.connection.rollback()
+            
             query = """
                 UPDATE Items
                 SET item_picture = %s,
@@ -317,13 +319,42 @@ class DatabaseConnection:
                 item_information = %s
                 WHERE item_id = %s
             """
+            
+            # Проверяем количество параметров
+            if len(user_input_data) != 10:
+                print(f"ОШИБКА: ожидалось 10 параметров, получено {len(user_input_data)}")
+                print(f"user_input_data: {user_input_data}")
+                return False
+            
+            # Подготавливаем параметры
+            params = [
+                picture_name,  # item_picture
+                user_input_data[0],  # item_article
+                user_input_data[1],  # item_name
+                user_input_data[2],  # item_edinica (unit)
+                float(user_input_data[3]) if user_input_data[3] else 0.0,  # item_cost
+                user_input_data[4],  # item_deliveryman
+                user_input_data[5],  # item_creator
+                user_input_data[6],  # item_category
+                int(user_input_data[7]) if user_input_data[7] else 0,  # item_sale
+                int(user_input_data[8]) if user_input_data[8] else 0,  # item_count
+                user_input_data[9],  # item_information
+                Storage.get_item_id()  # WHERE item_id
+            ]
+            
             cursor = self.connection.cursor()
-            cursor.execute(query, tuple(map(str, user_input_data)) + (Storage.get_item_id(),))
+            cursor.execute(query, tuple(params))
             self.connection.commit()
             cursor.close()
+            
+            print(f"Товар успешно обновлен в БД: ID={Storage.get_item_id()}")
+            print(f"Новое имя файла: {picture_name}")
             return True
+            
         except Exception as e:
             print(f"Ошибка обновления товара: {e}")
+            import traceback
+            traceback.print_exc()
             self.connection.rollback()
             return False
 

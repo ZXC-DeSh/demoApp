@@ -444,7 +444,7 @@ class HomeFrame(QFrame):
 
         # Получаем путь к папке проекта динамически
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_file_dir)  # Поднимаемся на уровень выше (из FRAMES в корень)
+        project_root = os.path.dirname(current_file_dir)
         icons_dir = os.path.join(project_root, "ICONS")
         
         # Формируем путь к изображению
@@ -460,10 +460,8 @@ class HomeFrame(QFrame):
                 if not picture.isNull():
                     picture_socket.setPixmap(picture)
                 else:
-                    # Если фото не загрузилось, используем заглушку
                     self.set_placeholder_image(picture_socket)
             else:
-                # Если файл не существует, используем заглушку
                 self.set_placeholder_image(picture_socket)
         except Exception as e:
             print(f"Ошибка загрузки изображения {picture_path}: {e}")

@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QFrame, QPushButton, QHBoxLayout, QScrollArea, QC
                                QWidget, QVBoxLayout, QLabel, QLineEdit, QTableWidget, 
                                QTableWidgetItem, QHeaderView, QMessageBox)
 from PySide6.QtCore import Qt
-from datetime import datetime
+from datetime import datetime, timedelta
 import Messages
 from FRAMES import HomePageWindow, OrdersCardsWindow
 from StaticStorage import Storage
@@ -97,24 +97,28 @@ class CreateOrderFrame(QFrame):
 
     def create_order_form(self):
         """Создает форму для ввода данных заказа"""
-        # Выбор клиента
-        self.client_combo = self.create_combo_field("Клиент:", self.get_clients_list())
-        self.form_layout.addWidget(self.client_combo)
+        # 1. Артикул заказа (автогенерация)
+        self.article_input = self.create_input_field("Артикул заказа:", "Автоматически сгенерируется", True)
+        self.form_layout.addWidget(self.article_input)
 
-        # ПВЗ
-        self.pvz_combo = self.create_combo_field("Пункт выдачи:", self.database.take_all_pvz_addresses())
-        self.form_layout.addWidget(self.pvz_combo)
-
-        # Статус заказа
-        self.status_combo = self.create_combo_field("Статус:", ["Новый", "В обработке", "Завершен"])
+        # 2. Статус заказа
+        self.status_combo = self.create_combo_field("Статус заказа:", ["Новый", "В обработке", "Завершен"])
+        self.status_combo.layout().itemAt(1).widget().setCurrentText("Новый")
         self.form_layout.addWidget(self.status_combo)
 
-        # Код для получения
-        self.code_input = self.create_input_field("Код для получения:", "Введите код")
-        self.form_layout.addWidget(self.code_input)
+        # 3. Адрес пункта выдачи
+        self.pvz_combo = self.create_combo_field("Адрес пункта выдачи:", self.database.take_all_pvz_addresses())
+        self.form_layout.addWidget(self.pvz_combo)
 
-        # Дата доставки
-        self.delivery_date_input = self.create_input_field("Дата доставки (ДД.ММ.ГГГГ):", datetime.now().strftime("%d.%m.%Y"))
+        # 4. Дата заказа (текущая дата)
+        current_date = datetime.now().strftime("%d.%m.%Y")
+        self.create_date_input = self.create_input_field("Дата заказа:", current_date, True)
+        self.form_layout.addWidget(self.create_date_input)
+        
+        # 5. Дата выдачи (доставки)
+        # Устанавливаем дату на 3 дня вперед по умолчанию
+        delivery_date = (datetime.now() + timedelta(days=3)).strftime("%d.%m.%Y")
+        self.delivery_date_input = self.create_input_field("Дата выдачи (ДД.ММ.ГГГГ):", delivery_date)
         self.form_layout.addWidget(self.delivery_date_input)
 
         # Блок добавления товаров
@@ -137,7 +141,7 @@ class CreateOrderFrame(QFrame):
         
         return widget
 
-    def create_input_field(self, label_text, placeholder):
+    def create_input_field(self, label_text, placeholder, readonly=False):
         """Создает поле для ввода текста"""
         widget = QWidget()
         widget.setFixedHeight(80)
@@ -146,6 +150,7 @@ class CreateOrderFrame(QFrame):
         layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
         input_field = QLineEdit()
         input_field.setPlaceholderText(placeholder)
+        input_field.setReadOnly(readonly)
         input_field.setObjectName("UpdateTextEdit")
         layout.addWidget(input_field)
         
@@ -213,22 +218,6 @@ class CreateOrderFrame(QFrame):
         except Exception as e:
             print(f"Ошибка загрузки товаров: {e}")
             Messages.send_C_message("Ошибка загрузки списка товаров!")
-
-    def get_clients_list(self):
-        """Получает список клиентов"""
-        try:
-            # В реальной системе здесь был бы запрос к БД для получения клиентов
-            # Пока используем фиктивные данные из user_import.xlsx
-            clients = [
-                "Михайлюк Анна Вячеславовна",
-                "Ситдикова Елена Анатольевна", 
-                "Ворсин Петр Евгеньевич",
-                "Старикова Елена Павловна"
-            ]
-            return clients
-        except Exception as e:
-            print(f"Ошибка загрузки клиентов: {e}")
-            return ["Клиент не выбран"]
 
     def add_product_to_order(self):
         """Добавляет товар в заказ"""
@@ -326,10 +315,8 @@ class CreateOrderFrame(QFrame):
 
             # Подготавливаем данные заказа
             order_data = {
-                'client_name': self.client_combo.layout().itemAt(1).widget().currentText(),
                 'pvz_id': int(self.pvz_combo.layout().itemAt(1).widget().currentText().split(' | ')[0]),
                 'status': self.status_combo.layout().itemAt(1).widget().currentText(),
-                'code': int(self.code_input.layout().itemAt(1).widget().text()),
                 'delivery_date': self.parse_date(self.delivery_date_input.layout().itemAt(1).widget().text()),
                 'items': self.order_items
             }
@@ -339,7 +326,7 @@ class CreateOrderFrame(QFrame):
                 Messages.send_I_message("Заказ успешно создан!")
                 
                 # Обновляем список заказов в кэшированном окне
-                self.refresh_orders_frame()
+                self.refresh_orders_window()
                 
                 self.go_back_to_orders_window()
             else:
@@ -348,7 +335,7 @@ class CreateOrderFrame(QFrame):
         except Exception as e:
             Messages.send_C_message(f"Ошибка создания заказа: {str(e)}")
 
-    def refresh_orders_frame(self):
+    def refresh_orders_window(self):
         """Обновляет данные в окне списка заказов"""
         try:
             # Получаем существующий фрейм заказов из кэша
@@ -361,56 +348,40 @@ class CreateOrderFrame(QFrame):
 
     def validate_order_data(self):
         """Валидация данных заказа"""
-        # Проверяем клиента
-        client = self.client_combo.layout().itemAt(1).widget().currentText()
-        if not client or client == "Клиент не выбран":
-            Messages.send_C_message("Выберите клиента!")
-            return False
-
         # Проверяем ПВЗ
         pvz_text = self.pvz_combo.layout().itemAt(1).widget().currentText()
         if not pvz_text:
-            Messages.send_C_message("Выберите пункт выдачи!")
+            Messages.send_C_message("Выберите пункт выдачи!", "Ошибка")
             return False
 
-        # Проверяем код
-        try:
-            code = int(self.code_input.layout().itemAt(1).widget().text())
-            if code <= 0:
-                Messages.send_C_message("Код должен быть положительным числом!")
-                return False
-        except ValueError:
-            Messages.send_C_message("Введите корректный код (число)!")
-            return False
-
-        # Проверяем дату доставки
+        # Проверяем дату выдачи
         delivery_date_text = self.delivery_date_input.layout().itemAt(1).widget().text()
         if not delivery_date_text:
-            Messages.send_C_message("Введите дату доставки!")
+            Messages.send_C_message("Введите дату выдачи!", "Ошибка")
             return False
         
         try:
             delivery_date = self.parse_date(delivery_date_text)
             if delivery_date < datetime.now().date():
-                Messages.send_C_message("Дата доставки не может быть в прошлом!")
+                Messages.send_C_message("Дата выдачи не может быть в прошлом!", "Ошибка")
                 return False
         except ValueError:
-            Messages.send_C_message("Введите корректную дату доставки (ДД.ММ.ГГГГ)!")
+            Messages.send_C_message("Введите корректную дату выдачи (ДД.ММ.ГГГГ)!", "Ошибка")
             return False
 
         # Проверяем товары в заказе
         if not self.order_items:
-            Messages.send_C_message("Добавьте хотя бы один товар в заказ!")
+            Messages.send_C_message("Добавьте хотя бы один товар в заказ!", "Ошибка")
             return False
 
         # Проверяем, что все товары все еще доступны в нужном количестве
         for item in self.order_items:
             product = next((p for p in self.available_products if p['article'] == item['article']), None)
             if not product:
-                Messages.send_C_message(f"Товар {item['article']} больше не доступен!")
+                Messages.send_C_message(f"Товар {item['article']} больше не доступен!", "Ошибка")
                 return False
             if item['quantity'] > product['count']:
-                Messages.send_C_message(f"Недостаточно товара '{item['name']}' на складе! Доступно: {product['count']}")
+                Messages.send_C_message(f"Недостаточно товара '{item['name']}' на складе! Доступно: {product['count']}", "Ошибка")
                 return False
 
         return True

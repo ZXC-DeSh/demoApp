@@ -734,32 +734,23 @@ class DatabaseConnection:
             return False
 
     def update_order_data(self, order_data):
-        """Обновляет данные заказа"""
+        """Обновляет данные заказа (без изменения состава)"""
         try:
             cursor = self.connection.cursor()
             
             # Обновляем основную информацию заказа
             update_query = """
             UPDATE Orders 
-            SET order_pvz_id_fk = %s, order_status = %s, order_code = %s, order_delivery_date = %s
+            SET order_pvz_id_fk = %s, order_status = %s, order_delivery_date = %s
             WHERE order_id = %s
             """
             
             cursor.execute(update_query, (
                 order_data['pvz_id'],
                 order_data['status'],
-                order_data['code'], 
                 order_data['delivery_date'],
                 order_data['id']
             ))
-            
-            # Удаляем старый состав заказа
-            cursor.execute("DELETE FROM OrderItems WHERE order_id = %s", (order_data['id'],))
-            
-            # Добавляем новый состав
-            items_query = "INSERT INTO OrderItems (order_id, product_article, quantity) VALUES (%s, %s, %s)"
-            for item in order_data['items']:
-                cursor.execute(items_query, (order_data['id'], item['article'], item['quantity']))
             
             self.connection.commit()
             cursor.close()

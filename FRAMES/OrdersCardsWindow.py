@@ -139,110 +139,113 @@ class OrdersCardsFrame(QFrame):
         """Создает карточку для одного заказа"""
         order_card = QWidget()
         order_card.setObjectName("item_card")
-        order_card.setFixedHeight(200)  # Уменьшили высоту карточки
-        order_card_hbox = QHBoxLayout(order_card)
-        order_card_hbox.setContentsMargins(10, 8, 10, 8)  # Уменьшили отступы
-        order_card_hbox.setSpacing(10)  # Уменьшили расстояние между элементами
-
-        # Основная информация о заказе
-        info_widget = QWidget()
-        info_widget.setObjectName("update_button")
-        info_layout = QVBoxLayout(info_widget)
-        info_layout.setContentsMargins(5, 5, 5, 5)  # Уменьшили внутренние отступы
-        info_layout.setSpacing(3)  # Уменьшили расстояние между строками
-
-        # Номер заказа и статус
-        header_layout = QHBoxLayout()
-        header_layout.addWidget(QLabel(f"Заказ #{order['id']}", objectName="cardText", 
-                                    styleSheet="font-weight: bold; font-size: 20px;"))  # Уменьшили шрифт
-        header_layout.addStretch()
-        header_layout.addWidget(QLabel(f"Статус: {order['status']}", objectName="cardText", 
-                                    styleSheet="font-size: 18px;"))  # Уменьшили шрифт статуса
-        info_layout.addLayout(header_layout)
-
-        # Информация о клиенте
-        info_layout.addWidget(QLabel(f"Клиент: {order['client_name']}", objectName="cardText", 
-                                  styleSheet="font-size: 20px;"))
-
-        # Адрес пункта выдачи
-        pvz_address = self.database.take_pvz_address(order['pvz'])
-        info_layout.addWidget(QLabel(f"ПВЗ: {pvz_address}", objectName="cardText", 
-                                  styleSheet="font-size: 20px;", wordWrap=True))
-
-        # Даты
-        dates_layout = QHBoxLayout()
-        dates_layout.addWidget(QLabel(f"Создан: {order['create_date']}", objectName="cardText", 
-                                   styleSheet="font-size: 20px;"))
-        dates_layout.addWidget(QLabel(f"Доставка: {order['delivery_date']}", objectName="cardText", 
-                                   styleSheet="font-size: 20px;"))
-        info_layout.addLayout(dates_layout)
-
-        # Код получения
-        info_layout.addWidget(QLabel(f"Код получения: {order['code']}", objectName="cardText", 
-                                  styleSheet="font-size: 20px;"))
-
-        # Состав заказа
+        order_card.setFixedHeight(180)  # Установили фиксированную высоту
+        order_card.setMinimumHeight(180)  # Минимальная высота
+        order_card.setMaximumHeight(200)  # Максимальная высота
+        
+        # Получаем артикул заказа из состава заказа (берем первый товар)
         order_items = self.database.get_order_items(order['id'])
-        items_text = ", ".join([f"{item['name']} x{item['quantity']}" for item in order_items[:3]])  # Показываем первые 3 товара
-        if len(order_items) > 3:
-            items_text += f" ... (всего {len(order_items)} товаров)"
+        article = ""
+        if order_items:
+            article = order_items[0]['article'] if order_items[0]['article'] else f"ORD{order['id']}"
+        else:
+            article = f"ORD{order['id']}"
         
-        info_layout.addWidget(QLabel(f"Товары: {items_text}", objectName="cardText", 
-                                  styleSheet="font-size: 20px;", wordWrap=True))
-
-        order_card_hbox.addWidget(info_widget)
+        # Делаем всю карточку кликабельной для всех ролей
+        order_card.setCursor(Qt.CursorShape.PointingHandCursor)
+        order_card.mousePressEvent = lambda e, oid=order['id']: self.on_order_card_clicked(oid, e)
         
-        # Блок кнопок (для всех пользователей - детали, для администратора - редактирование)
-        buttons_widget = QWidget()
-        buttons_layout = QVBoxLayout(buttons_widget)
-        buttons_layout.setContentsMargins(0, 0, 0, 0)  # Убрали внутренние отступы
-        buttons_layout.setSpacing(8)  # Оптимальное расстояние между кнопками
+        order_card_hbox = QHBoxLayout(order_card)
+        order_card_hbox.setContentsMargins(10, 10, 10, 10)
+        order_card_hbox.setSpacing(15)
 
-        # Кнопка "Детали" - для всех ролей
-        details_btn = QPushButton("Детали")
-        details_btn.setFixedSize(120, 60)  # Увеличили ширину для лучшего отображения
-        details_btn.setObjectName("button")
-        details_btn.setStyleSheet("font-size: 20px; font-weight: bold;")  # Уменьшили шрифт и сделали жирным
-        details_btn.setAccessibleName(str(order['id']))
-        details_btn.clicked.connect(self.go_to_order_details_window)
-        buttons_layout.addWidget(details_btn)
+        # Основная информация о заказе (левая часть)
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(5)
 
-        # Кнопка "Редактировать" - только для администратора
-        if Storage.get_user_role() == "Администратор":
-            edit_btn = QPushButton("Редактировать")
-            edit_btn.setFixedSize(160, 60)  # Такая же ширина для выравнивания
-            edit_btn.setObjectName("button")
-            edit_btn.setStyleSheet("font-size: 20px; font-weight: bold;")  # Еще меньше шрифт для длинного текста
-            edit_btn.setAccessibleName(str(order['id']))
-            edit_btn.clicked.connect(self.go_to_order_update_window)
-            buttons_layout.addWidget(edit_btn)
+        # 1. Артикул заказа (берем из состава заказа)
+        article_label = QLabel(f"Артикул: {article}")
+        article_label.setObjectName("cardText")
+        article_label.setStyleSheet("font-weight: bold; font-size: 20px;")
+        info_layout.addWidget(article_label)
 
-        order_card_hbox.addWidget(buttons_widget)
+        # 2. Статус заказа (простым текстом, сразу под артикулом)
+        status_label = QLabel(f"Статус: {order['status']}")
+        status_label.setObjectName("cardText")
+        status_label.setStyleSheet("font-size: 18px;")
+        info_layout.addWidget(status_label)
+
+        # 3. Адрес пункта выдачи
+        pvz_address = self.database.take_pvz_address(order['pvz'])
+        address_label = QLabel(f"Адрес: {pvz_address}")
+        address_label.setObjectName("cardText")
+        address_label.setStyleSheet("font-size: 18px;")
+        address_label.setWordWrap(True)
+        info_layout.addWidget(address_label)
+
+        # 4. Дата заказа
+        date_label = QLabel(f"Дата заказа: {order['create_date']}")
+        date_label.setObjectName("cardText")
+        date_label.setStyleSheet("font-size: 18px;")
+        info_layout.addWidget(date_label)
+
+        # Добавляем основную информацию
+        order_card_hbox.addWidget(info_widget, 70)  # 70% ширины
+
+        # Правая часть - дата доставки в отдельном квадрате
+        delivery_widget = QWidget()
+        delivery_widget.setObjectName("item_card")
+        delivery_widget.setFixedWidth(150)  # Фиксированная ширина
+        delivery_layout = QVBoxLayout(delivery_widget)
+        delivery_layout.setContentsMargins(5, 5, 5, 5)
+        delivery_layout.setSpacing(5)
+
+        # Добавляем растягивающий элемент сверху
+        delivery_layout.addStretch()
+
+        # Контейнер для центрирования даты доставки
+        date_container = QWidget()
+        date_container_layout = QVBoxLayout(date_container)
+        date_container_layout.setContentsMargins(0, 0, 0, 0)
+        date_container_layout.setSpacing(5)
+        
+        # Заголовок "Дата доставки"
+        delivery_title = QLabel("Дата доставки")
+        delivery_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        delivery_title.setStyleSheet("font-weight: bold; font-size: 16px;")
+        date_container_layout.addWidget(delivery_title)
+
+        # Сама дата доставки
+        delivery_date = QLabel(str(order['delivery_date']))
+        delivery_date.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        delivery_date.setStyleSheet("font-size: 20px; font-weight: bold;")
+        date_container_layout.addWidget(delivery_date)
+        
+        # Добавляем контейнер с датой в основной layout
+        date_container_layout.addStretch()
+        delivery_layout.addWidget(date_container)
+
+        # Добавляем растягивающий элемент внизу
+        delivery_layout.addStretch()
+
+        order_card_hbox.addWidget(delivery_widget, 30)  # 30% ширины
 
         return order_card
 
-
-    def go_to_order_update_window(self):
-        """Переход в окно редактирования заказа"""
-        if Storage.get_user_role() == "Администратор":
-            sender = self.sender()
-            order_id = sender.accessibleName()
-            print(f"Переход к редактированию заказа: {order_id}")
+    def on_order_card_clicked(self, order_id, event):
+        """Обработка клика по карточке заказа для всех ролей"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            print(f"Клик по карточке заказа: {order_id}")
             Storage.set_order_id(order_id)
+            # Все роли переходят на редактирование заказа
             self.controller.switch_window(UpdateOrderWindow.UpdateOrderFrame)
 
     def go_to_create_order_window(self):
         """Переход в окно создания заказа"""
         print("Переход в окно создания заказа")
         self.controller.switch_window(CreateOrderWindow.CreateOrderFrame)
-
-    def go_to_order_details_window(self):
-        """Переход к детальному просмотру заказа"""
-        sender = self.sender()
-        order_id = sender.accessibleName()
-        Storage.set_order_id(order_id)
-        from FRAMES import OrderDetailsWindow
-        self.controller.switch_window(OrderDetailsWindow.OrderDetailsFrame)
 
     def go_back_to_home_window(self):
         if Messages.send_I_message("Вы точно хотите прекратить редактирование?", "Подтверждение выхода") < 20000:

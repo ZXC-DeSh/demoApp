@@ -18,7 +18,6 @@ class UpdateOrderFrame(QFrame):
         # Данные заказа
         self.order_data = {}  # Инициализируем пустым словарем
         self.order_items = []
-        self.available_products = []
         
         self.frame_layout = QVBoxLayout(self)
         
@@ -72,7 +71,7 @@ class UpdateOrderFrame(QFrame):
 
         self.frame_layout.addWidget(header_widget)
         
-        title = QLabel("Редактирование заказа")
+        title = QLabel("Просмотр заказа" if Storage.get_user_role() != "Администратор" else "Редактирование заказа")
         title.setObjectName("Title")
         self.frame_layout.addWidget(title)
 
@@ -80,20 +79,22 @@ class UpdateOrderFrame(QFrame):
         scroll_area.setWidgetResizable(True)
         form_container = QWidget()
         self.form_layout = QVBoxLayout(form_container)
-        
+                
         self.create_order_form()
         scroll_area.setWidget(form_container)
         self.frame_layout.addWidget(scroll_area)
 
-        save_btn = QPushButton("Сохранить изменения")
-        save_btn.setObjectName("button")
-        save_btn.clicked.connect(self.save_changes)
-        self.frame_layout.addWidget(save_btn)
+        # Только администратор может сохранять изменения и удалять
+        if Storage.get_user_role() == "Администратор":
+            save_btn = QPushButton("Сохранить изменения")
+            save_btn.setObjectName("button")
+            save_btn.clicked.connect(self.save_changes)
+            self.frame_layout.addWidget(save_btn)
 
-        delete_btn = QPushButton("Удалить заказ")
-        delete_btn.setObjectName("button")
-        delete_btn.clicked.connect(self.delete_order)
-        self.frame_layout.addWidget(delete_btn)
+            delete_btn = QPushButton("Удалить заказ")
+            delete_btn.setObjectName("button")
+            delete_btn.clicked.connect(self.delete_order)
+            self.frame_layout.addWidget(delete_btn)
 
     def load_order_data(self):
         """Загружает данные заказа для редактирования"""
@@ -104,7 +105,7 @@ class UpdateOrderFrame(QFrame):
                 self.go_back_to_orders_window()
                 return
             
-            # Загружаем товары заказа
+            # Загружаем товары заказа (только для информации)
             self.order_items = self.database.get_order_items_with_prices(self.order_data['id'])
             
         except Exception as e:
@@ -113,46 +114,83 @@ class UpdateOrderFrame(QFrame):
             traceback.print_exc()
 
     def create_order_form(self):
-        """Создает форму редактирования заказа"""
+        """Создает форму редактирования/просмотра заказа"""
         if not self.order_data:
             Messages.send_C_message("Данные заказа не загружены!")
             return
 
-        # Клиент
-        self.client_input = self.create_input_field("Клиент:", self.order_data.get('client_name', ''), True)
-        self.form_layout.addWidget(self.client_input)
+        # Проверяем роль пользователя
+        is_admin = Storage.get_user_role() == "Администратор"
+        
+        # 1. Артикул заказа (номер заказа или артикул товара)
+        order_items = self.database.get_order_items(self.order_data['id'])
+        article = ""
+        if order_items:
+            article = order_items[0]['article'] if order_items[0]['article'] else f"ORD{self.order_data['id']}"
+        else:
+            article = f"ORD{self.order_data['id']}"
+            
+        self.article_input = self.create_input_field("Артикул заказа:", article, not is_admin)
+        self.form_layout.addWidget(self.article_input)
 
-        # ПВЗ
-        self.pvz_combo = self.create_combo_field("Пункт выдачи:", self.database.take_all_pvz_addresses())
-        self.set_combo_to_value(self.pvz_combo, f"{self.order_data.get('pvz', '')} | {self.database.take_pvz_address(self.order_data.get('pvz', ''))}")
-        self.form_layout.addWidget(self.pvz_combo)
-
-        # Статус
-        self.status_combo = self.create_combo_field("Статус:", ["Новый", "В обработке", "Завершен"])
+        # 2. Статус заказа
+        self.status_combo = self.create_combo_field("Статус заказа:", ["Новый", "В обработке", "Завершен"], not is_admin)
         self.set_combo_to_value(self.status_combo, self.order_data.get('status', 'Новый'))
         self.form_layout.addWidget(self.status_combo)
 
-        # Код
-        self.code_input = self.create_input_field("Код для получения:", str(self.order_data.get('code', '')), False)
-        self.form_layout.addWidget(self.code_input)
+        # 3. Адрес пункта выдачи
+        self.pvz_combo = self.create_combo_field("Адрес пункта выдачи:", self.database.take_all_pvz_addresses(), not is_admin)
+        self.set_combo_to_value(self.pvz_combo, f"{self.order_data.get('pvz', '')} | {self.database.take_pvz_address(self.order_data.get('pvz', ''))}")
+        self.form_layout.addWidget(self.pvz_combo)
 
-        # Даты
-        self.create_date_input = self.create_input_field("Дата создания:", str(self.order_data.get('create_date', '')), True)
+        # 4. Дата заказа
+        self.create_date_input = self.create_input_field("Дата заказа:", str(self.order_data.get('create_date', '')), True)
         self.form_layout.addWidget(self.create_date_input)
         
-        self.delivery_date_input = self.create_input_field("Дата доставки:", str(self.order_data.get('delivery_date', '')), False)
+        # 5. Дата выдачи (доставки)
+        self.delivery_date_input = self.create_input_field("Дата выдачи:", str(self.order_data.get('delivery_date', '')), not is_admin)
         self.form_layout.addWidget(self.delivery_date_input)
 
-        # Таблица товаров
-        self.create_order_items_table()
+        # Информация о составе заказа (ближе к основному блоку)
+        # Создаем виджет для состава заказа с таким же отступом как у полей ввода
+        order_items_widget = QWidget()
+        order_items_widget.setFixedHeight(80)
+        order_items_layout = QVBoxLayout(order_items_widget)
+        order_items_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Заголовок "Состав заказа" в том же стиле что и другие подсказки
+        items_title_label = QLabel("Состав заказа:")
+        items_title_label.setObjectName("UpdateTextHint")
+        order_items_layout.addWidget(items_title_label)
+        
+        # Товары в заказе
+        items_container = QWidget()
+        items_container_layout = QVBoxLayout(items_container)
+        items_container_layout.setContentsMargins(0, 5, 0, 0)
+                
+        if self.order_items:
+            for item in self.order_items:
+                item_label = QLabel(f"  • {item['name']} (Артикул: {item['article']}, Количество: {item['quantity']})")
+                item_label.setObjectName("cardText")
+                item_label.setStyleSheet("font-size: 18px; color: black;")
+                items_container_layout.addWidget(item_label)
+        else:
+            no_items_label = QLabel("  • Товары отсутствуют")
+            no_items_label.setObjectName("cardText")
+            no_items_label.setStyleSheet("font-size: 18px; color: black;")
+            items_container_layout.addWidget(no_items_label)
+        
+        order_items_layout.addWidget(items_container)
+        self.form_layout.addWidget(order_items_widget)
 
-    def create_combo_field(self, label_text, items_list):
+    def create_combo_field(self, label_text, items_list, readonly=False):
         widget = QWidget()
         widget.setFixedHeight(80)
         layout = QVBoxLayout(widget)
         layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
         combo = QComboBox()
         combo.addItems(items_list)
+        combo.setEnabled(not readonly)
         combo.setObjectName("UpdateTextEdit")
         layout.addWidget(combo)
         return widget
@@ -175,45 +213,12 @@ class UpdateOrderFrame(QFrame):
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    def create_order_items_table(self):
-        """Создает таблицу товаров заказа"""
-        self.form_layout.addWidget(QLabel("Товары в заказе:", objectName="UpdateTextHint"))
-
-        self.items_table = QTableWidget()
-        self.items_table.setColumnCount(4)
-        self.items_table.setHorizontalHeaderLabels(["Артикул", "Наименование", "Количество", "Действия"])
-        self.items_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.items_table.setMaximumHeight(300)
-        
-        self.update_order_items_table()
-        self.form_layout.addWidget(self.items_table)
-
-    def update_order_items_table(self):
-        """Обновляет таблицу товаров"""
-        self.items_table.setRowCount(len(self.order_items))
-        
-        for row, item in enumerate(self.order_items):
-            self.items_table.setItem(row, 0, QTableWidgetItem(item['article']))
-            self.items_table.setItem(row, 1, QTableWidgetItem(item['name']))
-            
-            quantity_item = QTableWidgetItem(str(item['quantity']))
-            quantity_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.items_table.setItem(row, 2, quantity_item)
-            
-            delete_btn = QPushButton("Удалить")
-            delete_btn.setObjectName("button")
-            delete_btn.clicked.connect(lambda checked, r=row: self.remove_order_item(r))
-            self.items_table.setCellWidget(row, 3, delete_btn)
-
-    def remove_order_item(self, row_index):
-        """Удаляет товар из заказа"""
-        if 0 <= row_index < len(self.order_items):
-            self.order_items.pop(row_index)
-            self.update_order_items_table()
-            Messages.send_I_message("Товар удален из заказа")
-
     def save_changes(self):
-        """Сохраняет изменения заказа"""
+        """Сохраняет изменения заказа (только для администратора)"""
+        if Storage.get_user_role() != "Администратор":
+            Messages.send_C_message("У вас нет прав для редактирования заказов!", "Ошибка доступа")
+            return
+            
         try:
             if not self.validate_order_data():
                 return
@@ -223,13 +228,13 @@ class UpdateOrderFrame(QFrame):
                 'id': self.order_data['id'],
                 'pvz_id': int(self.pvz_combo.layout().itemAt(1).widget().currentText().split(' | ')[0]),
                 'status': self.status_combo.layout().itemAt(1).widget().currentText(),
-                'code': int(self.code_input.layout().itemAt(1).widget().text()),
                 'delivery_date': self.parse_date(self.delivery_date_input.layout().itemAt(1).widget().text()),
-                'items': self.order_items
             }
 
             if self.database.update_order_data(order_data):
                 Messages.send_I_message("Заказ успешно обновлен!")
+                # Обновляем список заказов
+                self.refresh_orders_window()
                 self.go_back_to_orders_window()
             else:
                 Messages.send_C_message("Ошибка обновления заказа!")
@@ -239,27 +244,31 @@ class UpdateOrderFrame(QFrame):
             import traceback
             traceback.print_exc()
 
-    def validate_order_data(self):
-        """Валидация данных заказа"""
-        # Проверка кода
+    def refresh_orders_window(self):
+        """Обновляет данные в окне списка заказов"""
         try:
-            code = int(self.code_input.layout().itemAt(1).widget().text())
-            if code <= 0:
-                Messages.send_C_message("Код должен быть положительным числом!")
-                return False
-        except ValueError:
-            Messages.send_C_message("Введите корректный код!")
-            return False
+            # Получаем существующий фрейм заказов из кэша
+            orders_frame = self.controller.frames_cache.get('OrdersCardsFrame')
+            if orders_frame:
+                # Вызываем существующий метод обновления
+                orders_frame.update_orders_display()
+                print("Список заказов обновлен после сохранения")
+        except Exception as e:
+            print(f"Ошибка обновления списка заказов: {e}")
 
-        # Проверка даты доставки
+    def validate_order_data(self):
+        """Валидация данных заказа (только для администратора)"""
+        # Проверка даты выдачи
         delivery_date = self.delivery_date_input.layout().itemAt(1).widget().text()
         if not delivery_date:
-            Messages.send_C_message("Введите дату доставки!")
+            Messages.send_C_message("Введите дату выдачи!", "Ошибка")
             return False
 
-        # Проверка товаров
-        if not self.order_items:
-            Messages.send_C_message("Заказ должен содержать хотя бы один товар!")
+        try:
+            # Пробуем распарсить дату
+            self.parse_date(delivery_date)
+        except Exception:
+            Messages.send_C_message("Введите корректную дату выдачи!", "Ошибка")
             return False
 
         return True
@@ -274,14 +283,19 @@ class UpdateOrderFrame(QFrame):
             else:
                 return datetime.now().date()
         except Exception:
-            return datetime.now().date()
+            raise ValueError("Неверный формат даты")
 
     def delete_order(self):
-        """Удаляет заказ"""
-        reply = Messages.send_I_message("Вы точно хотите удалить этот заказ?")
-        if reply == QMessageBox.StandardButton.Yes:
+        """Удаляет заказ (только для администратора)"""
+        if Storage.get_user_role() != "Администратор":
+            Messages.send_C_message("У вас нет прав для удаления заказов!", "Ошибка доступа")
+            return
+            
+        if Messages.send_I_message("Вы точно хотите удалить этот заказ?", "Подтверждение удаления") < 20000:
             if self.database.delete_order(self.order_data['id']):
                 Messages.send_I_message("Заказ успешно удален!")
+                # Обновляем список заказов
+                self.refresh_orders_window()
                 self.go_back_to_orders_window()
             else:
                 Messages.send_C_message("Ошибка удаления заказа!")

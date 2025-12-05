@@ -400,12 +400,26 @@ class CreateOrderFrame(QFrame):
 
     def go_back_to_orders_window(self):
         """Возврат к списку заказов с обновлением данных"""
-        # Удаляем старый фрейм из кэша
-        if 'OrdersCardsFrame' in self.controller.frames_cache:
-            old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
-            self.controller.frame_container.removeWidget(old_frame)
-            old_frame.deleteLater()
-        
-        # Создаем новый фрейм
-        from FRAMES import OrdersCardsWindow
-        self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)
+        try:
+            # Удаляем старый фрейм из кэша
+            if 'OrdersCardsFrame' in self.controller.frames_cache:
+                old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
+                if old_frame:
+                    old_frame.deleteLater()
+                print("Старый фрейм заказов удален из кэша")
+            
+            # Создаем новый фрейм
+            from FRAMES import OrdersCardsWindow
+            new_frame = OrdersCardsWindow.OrdersCardsFrame(self.controller)
+            self.controller.frames_cache['OrdersCardsFrame'] = new_frame
+            self.controller.frame_container.addWidget(new_frame)
+            self.controller.frame_container.setCurrentWidget(new_frame)
+            
+            print("Создан новый фрейм заказов с обновленными данными")
+            
+        except Exception as e:
+            print(f"Ошибка возврата к списку заказов: {e}")
+            import traceback
+            traceback.print_exc()
+            from FRAMES import OrdersCardsWindow
+            self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)

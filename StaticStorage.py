@@ -26,14 +26,6 @@ class Storage:
         return Storage.current_item_id if Storage.current_item_id else None
 
     @staticmethod
-    def set_order_id(new_id):
-        Storage.current_order_id = new_id
-
-    @staticmethod
-    def get_order_id(): 
-        return Storage.current_order_id if Storage.current_order_id else None
-
-    @staticmethod
     def get_roles_action():
         if Storage.user_role and Storage.user_role in Storage.roles_actions:
             return Storage.roles_actions[Storage.user_role]
@@ -64,3 +56,21 @@ class Storage:
     @staticmethod
     def get_user_role() -> str: 
         return Storage.user_role if Storage.user_role else "Гость"
+    
+    @staticmethod
+    def set_order_id(new_id):
+        Storage.current_order_id = new_id
+        print(f"Storage: установлен order_id = {new_id}")
+
+    @staticmethod
+    def get_order_id(): 
+        return Storage.current_order_id if Storage.current_order_id else None
+
+    @staticmethod
+    def clear_all():
+        """Очищает все временные данные"""
+        Storage.user_login_pk = None
+        Storage.user_role = None
+        Storage.current_item_id = None
+        Storage.current_order_id = None
+        print("Storage: все данные очищены")

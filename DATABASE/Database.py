@@ -465,133 +465,89 @@ class DatabaseConnection:
             return []
 
     def take_all_orders_rows(self):
-        """
-        Метод получения списка товаров из Таблицы Orders
-        :return: [dict()]
-        """
+        """Получает все заказы для отображения в списке"""
         try:
-            # Восстанавливаем транзакцию если она сломана
-            self.connection.rollback()
+            cursor = self.connection.cursor()
             
             query = """
-            SELECT order_id, order_create_date, order_delivery_date, 
-                order_pvz_id_fk, order_client_name, order_code, order_status
-            FROM Orders
-            ORDER BY order_id;
+            SELECT 
+                order_id as id,
+                order_status as status,
+                order_pvz_id_fk as pvz,
+                order_create_date as create_date,
+                order_delivery_date as delivery_date,
+                order_client_name as client_name
+            FROM orders
+            ORDER BY order_id
             """
-
-            cursor = self.connection.cursor()
+            
             cursor.execute(query)
-
-            result = []
-            for answer in cursor.fetchall():
-                result.append(
-                    {
-                        "id": answer[0],
-                        "create_date": answer[1],
-                        "delivery_date": answer[2],
-                        "pvz": answer[3],
-                        "client_name": answer[4],
-                        "code": answer[5],
-                        "status": answer[6],
-                    }
-                )
+            rows = cursor.fetchall()
             cursor.close()
+            
+            result = []
+            for row in rows:
+                result.append({
+                    'id': row[0],
+                    'status': row[1],
+                    'pvz': row[2],
+                    'create_date': row[3],
+                    'delivery_date': row[4],
+                    'client_name': row[5]
+                })
+            
             print(f"Успешно получено заказов: {len(result)}")
             return result
+            
         except Exception as e:
-            print(f"Ошибка получения заказов: {e}")
-            import traceback
-            traceback.print_exc()
-            # Всегда восстанавливаем транзакцию при ошибке
-            self.connection.rollback()
+            print(f"Ошибка получения всех заказов: {e}")
             return []
 
     def take_single_order_data(self):
-        """
-        Метод получения данных о конкретном товаре
-        :return: dict()
-        """
+        """Получает данные текущего выбранного заказа"""
         try:
-            # Восстанавливаем транзакцию если она сломана
-            self.connection.rollback()
+            order_id = Storage.get_order_id()
+            if not order_id:
+                print("Нет order_id в Storage")
+                return {}
+                
+            return self.get_order_by_id(order_id)
             
-            query = """
-            SELECT order_id, order_create_date, order_delivery_date, 
-                order_pvz_id_fk, order_client_name, order_code, order_status
-            FROM Orders
-            WHERE order_id = %s;
-            """
-
-            cursor = self.connection.cursor()
-            cursor.execute(query, (Storage.get_order_id(),))
-
-            result = {}
-            for answer in cursor.fetchall():
-                result = {
-                    "id": answer[0],
-                    "create_date": answer[1],
-                    "delivery_date": answer[2],
-                    "pvz": answer[3],
-                    "client_name": answer[4],
-                    "code": answer[5],
-                    "status": answer[6],
-                }
-
-            cursor.close()
-            return result
         except Exception as e:
-            print(f"Ошибка получения данных заказа: {e}")
-            import traceback
-            traceback.print_exc()
-            self.connection.rollback()
+            print(f"Ошибка в take_single_order_data: {e}")
             return {}
 
-    def take_pvz_address(self,
-                         pvz_id):
-        """
-        Метод получения адреса ПВЗ для заказа
-        :param pvz_id: id ПВЗ из заказа
-        :return: string
-        """
+    def take_pvz_address(self, pvz_id):
+        """Получает адрес ПВЗ по ID"""
         try:
             cursor = self.connection.cursor()
-            cursor.execute(
-                """
-                select pvz_address
-                from PVZ
-                where pvz_id = %s
-                """,
-                (pvz_id,)
-            )
+            query = "SELECT pvz_address FROM pvz WHERE pvz_id = %s"
+            cursor.execute(query, (pvz_id,))
             result = cursor.fetchone()
             cursor.close()
-            return str(result[0]) if result else "Адрес не найден"
+            
+            if result:
+                return result[0]
+            else:
+                return "Адрес не найден"
         except Exception as e:
             print(f"Ошибка получения адреса ПВЗ: {e}")
-            return "Адрес не найден"
+            return "Ошибка загрузки адреса"
 
     def take_all_pvz_addresses(self):
-        """
-        Метод получения всех ПВЗ для редактирования / создания нового заказа
-        :return: list("1 | Старокачаловская д3к1")
-        """
+        """Получает все адреса ПВЗ для выпадающего списка"""
         try:
             cursor = self.connection.cursor()
-            cursor.execute("""
-            select *
-            from PVZ
-            order by pvz_id
-            """)
-
-            result = []
-            for answer in cursor.fetchall():
-                result.append(f"{answer[0]} | {answer[1]}")
-
+            query = "SELECT pvz_id, pvz_address FROM pvz ORDER BY pvz_id"
+            cursor.execute(query)
+            rows = cursor.fetchall()
             cursor.close()
+            
+            # Формируем строки в формате "ID | Адрес"
+            result = [f"{row[0]} | {row[1]}" for row in rows]
             return result
         except Exception as e:
-            print(f"Ошибка получения ПВЗ: {e}")
+            print(f"Ошибка получения адресов ПВЗ: {e}")
             return []
 
     def take_all_statuses(self):
@@ -614,59 +570,72 @@ class DatabaseConnection:
             print(f"Ошибка получения статусов: {e}")
             return ["Новый", "Завершен"]
 
-    # Новые методы для работы с заказами
     def get_order_items(self, order_id):
-        """Получает состав заказа"""
+        """Получает товары заказа"""
         try:
+            cursor = self.connection.cursor()
+            
             query = """
-            SELECT oi.product_article, oi.quantity, i.item_name
-            FROM OrderItems oi
-            LEFT JOIN Items i ON oi.product_article = i.item_article
+            SELECT 
+                oi.product_article as article,
+                oi.quantity,
+                i.item_name as name
+            FROM orderitems oi
+            LEFT JOIN items i ON oi.product_article = i.item_article
             WHERE oi.order_id = %s
             """
-            cursor = self.connection.cursor()
+            
             cursor.execute(query, (order_id,))
+            rows = cursor.fetchall()
+            cursor.close()
             
             result = []
-            for row in cursor.fetchall():
+            for row in rows:
                 result.append({
                     'article': row[0],
                     'quantity': row[1],
-                    'name': row[2]
+                    'name': row[2] if row[2] else 'Товар не найден'
                 })
             
-            cursor.close()
             return result
+            
         except Exception as e:
-            print(f"Ошибка получения состава заказа: {e}")
+            print(f"Ошибка получения товаров заказа: {e}")
             return []
 
     def get_order_items_with_prices(self, order_id):
-        """Получает состав заказа с ценами товаров"""
+        """Получает товары заказа с ценами"""
         try:
-            query = """
-            SELECT oi.product_article, oi.quantity, i.item_name, i.item_cost
-            FROM OrderItems oi
-            LEFT JOIN Items i ON oi.product_article = i.item_article
-            WHERE oi.order_id = %s
-            ORDER BY i.item_name
-            """
             cursor = self.connection.cursor()
+            
+            query = """
+            SELECT 
+                oi.product_article as article,
+                oi.quantity,
+                i.item_name as name,
+                i.item_cost as price
+            FROM orderitems oi
+            LEFT JOIN items i ON oi.product_article = i.item_article
+            WHERE oi.order_id = %s
+            """
+            
             cursor.execute(query, (order_id,))
+            rows = cursor.fetchall()
+            cursor.close()
             
             result = []
-            for row in cursor.fetchall():
+            for row in rows:
                 result.append({
                     'article': row[0],
                     'quantity': row[1],
-                    'name': row[2],
-                    'cost': float(row[3]) if row[3] else 0.0
+                    'name': row[2] if row[2] else 'Товар не найден',
+                    'price': row[3] if row[3] else 0
                 })
             
-            cursor.close()
             return result
+            
         except Exception as e:
-            print(f"Ошибка получения состава заказа с ценами: {e}")
+            print(f"Ошибка получения товаров заказа с ценами: {e}")
             return []
 
     def check_product_in_orders(self, product_article):
@@ -734,18 +703,20 @@ class DatabaseConnection:
             return False
 
     def update_order_data(self, order_data):
-        """Обновляет данные заказа (без изменения состава)"""
+        """Обновляет данные заказа"""
         try:
             cursor = self.connection.cursor()
             
-            # Обновляем основную информацию заказа
-            update_query = """
-            UPDATE Orders 
-            SET order_pvz_id_fk = %s, order_status = %s, order_delivery_date = %s
+            query = """
+            UPDATE orders 
+            SET 
+                order_pvz_id_fk = %s,
+                order_status = %s,
+                order_delivery_date = %s
             WHERE order_id = %s
             """
             
-            cursor.execute(update_query, (
+            cursor.execute(query, (
                 order_data['pvz_id'],
                 order_data['status'],
                 order_data['delivery_date'],
@@ -754,6 +725,8 @@ class DatabaseConnection:
             
             self.connection.commit()
             cursor.close()
+            
+            print(f"Заказ {order_data['id']} успешно обновлен")
             return True
             
         except Exception as e:
@@ -826,3 +799,47 @@ class DatabaseConnection:
             traceback.print_exc()
             self.connection.rollback()
             return False
+        
+    def get_order_by_id(self, order_id):
+        """Получает данные конкретного заказа по ID"""
+        try:
+            cursor = self.connection.cursor()
+
+            query = """
+            SELECT 
+                order_id as id,
+                order_create_date as create_date,
+                order_delivery_date as delivery_date,
+                order_pvz_id_fk as pvz,
+                order_status as status,
+                order_client_name as client_name,
+                order_code as code
+            FROM orders
+            WHERE order_id = %s
+            """
+            
+            print(f"Выполняем запрос заказа ID: {order_id}")
+            cursor.execute(query, (order_id,))
+            result = cursor.fetchone()
+            cursor.close()
+            
+            if result:
+                print(f"Найден заказ: {result}")
+                return {
+                    'id': result[0],
+                    'create_date': result[1],
+                    'delivery_date': result[2],
+                    'pvz': result[3],
+                    'status': result[4],
+                    'client_name': result[5],
+                    'code': result[6]
+                }
+            else:
+                print(f"Заказ с ID {order_id} не найден")
+                return None
+                
+        except Exception as e:
+            print(f"Ошибка получения заказа по ID: {e}")
+            import traceback
+            traceback.print_exc()
+            return None

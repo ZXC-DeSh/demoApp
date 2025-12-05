@@ -301,15 +301,18 @@ QMessageBox QLabel {
 }
 
 QMessageBox QPushButton {
-    background-color: #00FA9A;
+    background-color: white;
     color: black;
-    border: 1px solid black;
-    padding: 5px 15px;
+    border: 1px solid gray;
+    padding: 8px 16px;
     font-size: 14px;
+    font-family: "Times New Roman";
+    min-width: 70px;
 }
 
 QMessageBox QPushButton:hover {
-    background-color: #7FFF00;
-    font-weight: bold;
+    background-color: white;
+    color: black;
+    border: 1px solid black;
 }
 """

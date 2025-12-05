@@ -238,8 +238,16 @@ class OrdersCardsFrame(QFrame):
         """Обработка клика по карточке заказа для всех ролей"""
         if event.button() == Qt.MouseButton.LeftButton:
             print(f"Клик по карточке заказа: {order_id}")
+            # Устанавливаем ID заказа в Storage
             Storage.set_order_id(order_id)
-            # Все роли переходят на редактирование заказа
+            
+            # Очищаем кэш старого фрейма редактирования заказа
+            if 'UpdateOrderFrame' in self.controller.frames_cache:
+                old_frame = self.controller.frames_cache.pop('UpdateOrderFrame')
+                old_frame.deleteLater()
+            
+            # Создаем новый фрейм с актуальными данными
+            from FRAMES import UpdateOrderWindow
             self.controller.switch_window(UpdateOrderWindow.UpdateOrderFrame)
 
     def go_to_create_order_window(self):
@@ -252,4 +260,7 @@ class OrdersCardsFrame(QFrame):
             # Очищаем временные данные
             Storage.set_item_id(None)
             Storage.set_order_id(None)
+            
+            # Удаляем фреймы из кэша
+            self.controller.clear_cache_except(['HomeFrame', 'LogInFrame'])
             self.controller.switch_window(HomePageWindow.HomeFrame)

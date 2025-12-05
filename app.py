@@ -55,8 +55,18 @@ class MainApplicationClass(QMainWindow):
         # Устанавливаем текущий фрейм
         self.frame_container.setCurrentWidget(frame)
 
-
-
+    def clear_cache_except(self, frame_names):
+        """Очищает кэш фреймов, кроме указанных"""
+        frames_to_remove = []
+        for name, frame in self.frames_cache.items():
+            if name not in frame_names:
+                frames_to_remove.append(name)
+        
+        for name in frames_to_remove:
+            frame = self.frames_cache.pop(name)
+            self.frame_container.removeWidget(frame)
+            frame.deleteLater()
+            print(f"Удален фрейм из кэша: {name}")
 
 application = QApplication(sys.argv)
 

@@ -129,19 +129,31 @@ class UpdateOrderFrame(QFrame):
     def load_order_data(self):
         """Загружает данные заказа для редактирования"""
         try:
-            self.order_data = self.database.take_single_order_data()
+            order_id = Storage.get_order_id()
+            if not order_id:
+                Messages.send_C_message("ID заказа не указан!", "Ошибка")
+                self.go_back_to_orders_window()
+                return
+                
+            print(f"Загружаем данные заказа ID: {order_id}")
+            
+            # Получаем данные конкретного заказа
+            self.order_data = self.database.get_order_by_id(order_id)
             if not self.order_data:
-                Messages.send_C_message("Заказ не найден!")
+                Messages.send_C_message("Заказ не найден!", "Ошибка")
                 self.go_back_to_orders_window()
                 return
             
-            # Загружаем товары заказа (только для информации)
-            self.order_items = self.database.get_order_items_with_prices(self.order_data['id'])
+            print(f"Данные загружены: {self.order_data}")
+            
+            # Загружаем товары заказа
+            self.order_items = self.database.get_order_items_with_prices(order_id)
             
         except Exception as e:
             Messages.send_C_message(f"Ошибка загрузки данных заказа: {str(e)}", "Ошибка загрузки")
             import traceback
             traceback.print_exc()
+            self.go_back_to_orders_window()
 
     def create_order_form(self):
         """Создает форму редактирования/просмотра заказа"""
@@ -292,18 +304,22 @@ class UpdateOrderFrame(QFrame):
                 return
 
             # Подготавливаем данные
+            pvz_text = self.pvz_combo.layout().itemAt(1).widget().currentText()
+            pvz_id = int(pvz_text.split(' | ')[0]) if ' | ' in pvz_text else int(pvz_text)
+            
             order_data = {
                 'id': self.order_data['id'],
-                'pvz_id': int(self.pvz_combo.layout().itemAt(1).widget().currentText().split(' | ')[0]),
+                'pvz_id': pvz_id,
                 'status': self.status_combo.layout().itemAt(1).widget().currentText(),
                 'delivery_date': self.parse_date(self.delivery_date_input.layout().itemAt(1).widget().text()),
             }
 
+            print(f"Сохранение заказа: {order_data}")
+            
             if self.database.update_order_data(order_data):
                 Messages.send_I_message("Заказ успешно обновлен!")
                 # Обновляем список заказов
                 self.refresh_orders_window()
-                self.go_back_to_orders_window()
             else:
                 Messages.send_C_message("Ошибка обновления заказа!")
 
@@ -315,14 +331,21 @@ class UpdateOrderFrame(QFrame):
     def refresh_orders_window(self):
         """Обновляет данные в окне списка заказов"""
         try:
-            # Получаем существующий фрейм заказов из кэша
-            orders_frame = self.controller.frames_cache.get('OrdersCardsFrame')
-            if orders_frame:
-                # Вызываем существующий метод обновления
-                orders_frame.update_orders_display()
-                print("Список заказов обновлен после сохранения")
+            # Удаляем старый фрейм из кэша
+            if 'OrdersCardsFrame' in self.controller.frames_cache:
+                old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
+                old_frame.deleteLater()
+                print("Старый фрейм заказов удален из кэша")
+            
+            # Создаем новый фрейм с обновленными данными
+            from FRAMES import OrdersCardsWindow
+            self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)
+            print("Создан новый фрейм заказов")
+            
         except Exception as e:
             print(f"Ошибка обновления списка заказов: {e}")
+            import traceback
+            traceback.print_exc()
 
     def validate_order_data(self):
         """Валидация данных заказа (только для администратора)"""

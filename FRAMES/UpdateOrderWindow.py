@@ -79,6 +79,7 @@ class UpdateOrderFrame(QFrame):
         scroll_area.setWidgetResizable(True)
         form_container = QWidget()
         self.form_layout = QVBoxLayout(form_container)
+        self.form_layout.setSpacing(0)  # УБИРАЕМ ВСЕ ОТСТУПЫ МЕЖДУ ЭЛЕМЕНТАМИ
                 
         self.create_order_form()
         scroll_area.setWidget(form_container)
@@ -151,33 +152,34 @@ class UpdateOrderFrame(QFrame):
         self.delivery_date_input = self.create_input_field("Дата выдачи:", str(self.order_data.get('delivery_date', '')), not is_admin)
         self.form_layout.addWidget(self.delivery_date_input)
 
-        # Информация о составе заказа (ближе к основному блоку)
-        # Создаем виджет для состава заказа с таким же отступом как у полей ввода
+        # Информация о составе заказа
         order_items_widget = QWidget()
-        order_items_widget.setFixedHeight(80)
         order_items_layout = QVBoxLayout(order_items_widget)
+        order_items_layout.setSpacing(3)  # Минимальный отступ
         order_items_layout.setContentsMargins(0, 0, 0, 0)
         
         # Заголовок "Состав заказа" в том же стиле что и другие подсказки
         items_title_label = QLabel("Состав заказа:")
         items_title_label.setObjectName("UpdateTextHint")
+        items_title_label.setContentsMargins(0, 5, 0, 3)  # Небольшие отступы сверху и снизу
         order_items_layout.addWidget(items_title_label)
         
         # Товары в заказе
         items_container = QWidget()
         items_container_layout = QVBoxLayout(items_container)
-        items_container_layout.setContentsMargins(0, 5, 0, 0)
+        items_container_layout.setSpacing(2)  # Минимальный отступ между товарами
+        items_container_layout.setContentsMargins(0, 0, 0, 0)
                 
         if self.order_items:
             for item in self.order_items:
                 item_label = QLabel(f"  • {item['name']} (Артикул: {item['article']}, Количество: {item['quantity']})")
                 item_label.setObjectName("cardText")
-                item_label.setStyleSheet("font-size: 18px; color: black;")
+                item_label.setStyleSheet("font-size: 18px; color: black; padding: 0px;")
                 items_container_layout.addWidget(item_label)
         else:
             no_items_label = QLabel("  • Товары отсутствуют")
             no_items_label.setObjectName("cardText")
-            no_items_label.setStyleSheet("font-size: 18px; color: black;")
+            no_items_label.setStyleSheet("font-size: 18px; color: black; padding: 0px;")
             items_container_layout.addWidget(no_items_label)
         
         order_items_layout.addWidget(items_container)
@@ -185,9 +187,14 @@ class UpdateOrderFrame(QFrame):
 
     def create_combo_field(self, label_text, items_list, readonly=False):
         widget = QWidget()
-        widget.setFixedHeight(80)
+        widget.setMaximumHeight(70)  # Ограничиваем максимальную высоту
+        widget.setMinimumHeight(60)  # Минимальная высота
         layout = QVBoxLayout(widget)
-        layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
+        layout.setSpacing(1)  # ОЧЕНЬ маленький отступ между меткой и полем
+        layout.setContentsMargins(0, 0, 0, 0)  # Нет внешних отступов
+        label = QLabel(label_text, objectName="UpdateTextHint")
+        label.setContentsMargins(0, 0, 0, 1)  # Минимальный отступ снизу
+        layout.addWidget(label)
         combo = QComboBox()
         combo.addItems(items_list)
         combo.setEnabled(not readonly)
@@ -197,9 +204,14 @@ class UpdateOrderFrame(QFrame):
 
     def create_input_field(self, label_text, value, readonly=False):
         widget = QWidget()
-        widget.setFixedHeight(80)
+        widget.setMaximumHeight(70)  # Ограничиваем максимальную высоту
+        widget.setMinimumHeight(60)  # Минимальная высота
         layout = QVBoxLayout(widget)
-        layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
+        layout.setSpacing(1)  # ОЧЕНЬ маленький отступ между меткой и полем
+        layout.setContentsMargins(0, 0, 0, 0)  # Нет внешних отступов
+        label = QLabel(label_text, objectName="UpdateTextHint")
+        label.setContentsMargins(0, 0, 0, 1)  # Минимальный отступ снизу
+        layout.addWidget(label)
         input_field = QLineEdit()
         input_field.setText(str(value))
         input_field.setReadOnly(readonly)

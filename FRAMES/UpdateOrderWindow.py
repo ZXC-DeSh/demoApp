@@ -73,29 +73,58 @@ class UpdateOrderFrame(QFrame):
         
         title = QLabel("Просмотр заказа" if Storage.get_user_role() != "Администратор" else "Редактирование заказа")
         title.setObjectName("Title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.frame_layout.addWidget(title)
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        # Главный контейнер для всех элементов
+        main_container = QWidget()
+        main_layout = QVBoxLayout(main_container)
+        main_layout.setContentsMargins(20, 10, 20, 20)
+        main_layout.setSpacing(15)
+        
+        # Контейнер формы
         form_container = QWidget()
         self.form_layout = QVBoxLayout(form_container)
-        self.form_layout.setSpacing(0)  # УБИРАЕМ ВСЕ ОТСТУПЫ МЕЖДУ ЭЛЕМЕНТАМИ
+        self.form_layout.setContentsMargins(0, 0, 0, 0)
+        self.form_layout.setSpacing(10)  # Равномерный отступ между полями
                 
         self.create_order_form()
-        scroll_area.setWidget(form_container)
+        
+        # Добавляем форму в основной контейнер
+        main_layout.addWidget(form_container)
+        
+        # Растягивающий элемент, чтобы поля не растягивались по всей высоте
+        main_layout.addStretch()
+        
+        scroll_area.setWidget(main_container)
         self.frame_layout.addWidget(scroll_area)
 
         # Только администратор может сохранять изменения и удалять
         if Storage.get_user_role() == "Администратор":
+            # Контейнер для кнопок
+            buttons_widget = QWidget()
+            buttons_layout = QVBoxLayout(buttons_widget)
+            buttons_layout.setContentsMargins(20, 10, 20, 20)
+            buttons_layout.setSpacing(10)
+            
             save_btn = QPushButton("Сохранить изменения")
             save_btn.setObjectName("button")
             save_btn.clicked.connect(self.save_changes)
-            self.frame_layout.addWidget(save_btn)
+            save_btn.setMinimumHeight(40)
+            buttons_layout.addWidget(save_btn)
 
             delete_btn = QPushButton("Удалить заказ")
             delete_btn.setObjectName("button")
             delete_btn.clicked.connect(self.delete_order)
-            self.frame_layout.addWidget(delete_btn)
+            delete_btn.setMinimumHeight(40)
+            buttons_layout.addWidget(delete_btn)
+            
+            self.frame_layout.addWidget(buttons_widget)
 
     def load_order_data(self):
         """Загружает данные заказа для редактирования"""
@@ -152,34 +181,55 @@ class UpdateOrderFrame(QFrame):
         self.delivery_date_input = self.create_input_field("Дата выдачи:", str(self.order_data.get('delivery_date', '')), not is_admin)
         self.form_layout.addWidget(self.delivery_date_input)
 
-        # Информация о составе заказа
+        # 6. Состав заказа (только для просмотра)
+        self.create_order_items_section()
+
+    def create_order_items_section(self):
+        """Создает раздел с составом заказа"""
         order_items_widget = QWidget()
         order_items_layout = QVBoxLayout(order_items_widget)
-        order_items_layout.setSpacing(3)  # Минимальный отступ
+        order_items_layout.setSpacing(8)
         order_items_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Заголовок "Состав заказа" в том же стиле что и другие подсказки
+        # Заголовок "Состав заказа"
         items_title_label = QLabel("Состав заказа:")
         items_title_label.setObjectName("UpdateTextHint")
-        items_title_label.setContentsMargins(0, 5, 0, 3)  # Небольшие отступы сверху и снизу
+        items_title_label.setContentsMargins(0, 5, 0, 5)
         order_items_layout.addWidget(items_title_label)
         
-        # Товары в заказе
+        # Контейнер для списка товаров с фиксированной высотой
         items_container = QWidget()
+        items_container.setMaximumHeight(200)  # Ограничиваем максимальную высоту
         items_container_layout = QVBoxLayout(items_container)
-        items_container_layout.setSpacing(2)  # Минимальный отступ между товарами
-        items_container_layout.setContentsMargins(0, 0, 0, 0)
-                
+        items_container_layout.setSpacing(5)
+        items_container_layout.setContentsMargins(10, 5, 10, 5)
+        
         if self.order_items:
             for item in self.order_items:
-                item_label = QLabel(f"  • {item['name']} (Артикул: {item['article']}, Количество: {item['quantity']})")
-                item_label.setObjectName("cardText")
-                item_label.setStyleSheet("font-size: 18px; color: black; padding: 0px;")
-                items_container_layout.addWidget(item_label)
+                item_widget = QWidget()
+                item_layout = QHBoxLayout(item_widget)
+                item_layout.setContentsMargins(0, 0, 0, 0)
+                
+                # Название товара
+                name_label = QLabel(f"{item['name']}")
+                name_label.setObjectName("cardText")
+                name_label.setStyleSheet("font-size: 14px; color: black;")
+                name_label.setWordWrap(True)
+                item_layout.addWidget(name_label, 70)  # 70% ширины
+                
+                # Детали (артикул и количество)
+                details_label = QLabel(f"Арт: {item['article']}, Кол-во: {item['quantity']}")
+                details_label.setObjectName("cardText")
+                details_label.setStyleSheet("font-size: 12px; color: gray;")
+                details_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+                item_layout.addWidget(details_label, 30)  # 30% ширины
+                
+                items_container_layout.addWidget(item_widget)
         else:
-            no_items_label = QLabel("  • Товары отсутствуют")
+            no_items_label = QLabel("Товары отсутствуют")
             no_items_label.setObjectName("cardText")
-            no_items_label.setStyleSheet("font-size: 18px; color: black; padding: 0px;")
+            no_items_label.setStyleSheet("font-size: 14px; color: gray; font-style: italic;")
+            no_items_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             items_container_layout.addWidget(no_items_label)
         
         order_items_layout.addWidget(items_container)
@@ -187,36 +237,42 @@ class UpdateOrderFrame(QFrame):
 
     def create_combo_field(self, label_text, items_list, readonly=False):
         widget = QWidget()
-        widget.setMaximumHeight(70)  # Ограничиваем максимальную высоту
-        widget.setMinimumHeight(60)  # Минимальная высота
         layout = QVBoxLayout(widget)
-        layout.setSpacing(1)  # ОЧЕНЬ маленький отступ между меткой и полем
-        layout.setContentsMargins(0, 0, 0, 0)  # Нет внешних отступов
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
         label = QLabel(label_text, objectName="UpdateTextHint")
-        label.setContentsMargins(0, 0, 0, 1)  # Минимальный отступ снизу
+        label.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
+        
         combo = QComboBox()
         combo.addItems(items_list)
         combo.setEnabled(not readonly)
         combo.setObjectName("UpdateTextEdit")
+        combo.setMinimumHeight(35)
+        combo.setMaximumHeight(40)
         layout.addWidget(combo)
+        
         return widget
 
     def create_input_field(self, label_text, value, readonly=False):
         widget = QWidget()
-        widget.setMaximumHeight(70)  # Ограничиваем максимальную высоту
-        widget.setMinimumHeight(60)  # Минимальная высота
         layout = QVBoxLayout(widget)
-        layout.setSpacing(1)  # ОЧЕНЬ маленький отступ между меткой и полем
-        layout.setContentsMargins(0, 0, 0, 0)  # Нет внешних отступов
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
         label = QLabel(label_text, objectName="UpdateTextHint")
-        label.setContentsMargins(0, 0, 0, 1)  # Минимальный отступ снизу
+        label.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
+        
         input_field = QLineEdit()
         input_field.setText(str(value))
         input_field.setReadOnly(readonly)
         input_field.setObjectName("UpdateTextEdit")
+        input_field.setMinimumHeight(35)
+        input_field.setMaximumHeight(40)
         layout.addWidget(input_field)
+        
         return widget
 
     def set_combo_to_value(self, combo_widget, value):

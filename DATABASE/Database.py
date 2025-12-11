@@ -688,6 +688,14 @@ class DatabaseConnection:
             for item in order_data['items']:
                 cursor.execute(items_query, (order_id, item['article'], item['quantity']))
                 print(f"Добавлен товар {item['article']} x{item['quantity']}")
+                
+                # Уменьшаем количество товара на складе
+                update_query = """
+                UPDATE Items 
+                SET item_count = item_count - %s 
+                WHERE item_article = %s
+                """
+                cursor.execute(update_query, (item['quantity'], item['article']))
             
             self.connection.commit()
             cursor.close()
@@ -738,7 +746,25 @@ class DatabaseConnection:
         """Удаляет заказ"""
         try:
             cursor = self.connection.cursor()
+            
+            # Сначала возвращаем товары на склад
+            cursor.execute("""
+            SELECT product_article, quantity 
+            FROM OrderItems 
+            WHERE order_id = %s
+            """, (order_id,))
+            
+            items = cursor.fetchall()
+            for article, quantity in items:
+                cursor.execute("""
+                UPDATE Items 
+                SET item_count = item_count + %s 
+                WHERE item_article = %s
+                """, (quantity, article))
+            
+            # Удаляем заказ (каскадно удалятся OrderItems)
             cursor.execute("DELETE FROM Orders WHERE order_id = %s", (order_id,))
+            
             self.connection.commit()
             cursor.close()
             return True
@@ -746,60 +772,7 @@ class DatabaseConnection:
             print(f"Ошибка удаления заказа: {e}")
             self.connection.rollback()
             return False
-        
-    def create_new_order(self, order_data):
-        """Создает новый заказ в БД"""
-        try:
-            cursor = self.connection.cursor()
-            
-            # Вставляем заказ
-            order_query = """
-            INSERT INTO Orders (order_create_date, order_delivery_date, order_pvz_id_fk,
-                            order_client_name, order_code, order_status)
-            VALUES (CURRENT_DATE, %s, %s, %s, %s, %s)
-            RETURNING order_id
-            """
-            
-            cursor.execute(order_query, (
-                order_data['delivery_date'],
-                order_data['pvz_id'],
-                order_data['client_name'], 
-                order_data['code'],
-                order_data['status']
-            ))
-            
-            order_id = cursor.fetchone()[0]
-            print(f"Создан заказ с ID: {order_id}")
-            
-            # Вставляем товары заказа
-            items_query = """
-            INSERT INTO OrderItems (order_id, product_article, quantity)
-            VALUES (%s, %s, %s)
-            """
-            
-            for item in order_data['items']:
-                cursor.execute(items_query, (order_id, item['article'], item['quantity']))
-                print(f"Добавлен товар {item['article']} x{item['quantity']}")
-            
-            self.connection.commit()
-            cursor.close()
-            
-            # Проверяем, что заказ действительно создался
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT COUNT(*) FROM Orders WHERE order_id = %s", (order_id,))
-            count = cursor.fetchone()[0]
-            cursor.close()
-            print(f"Подтверждение создания заказа: {count} записей с ID {order_id}")
-            
-            return True
-            
-        except Exception as e:
-            print(f"Ошибка создания заказа: {e}")
-            import traceback
-            traceback.print_exc()
-            self.connection.rollback()
-            return False
-        
+
     def get_order_by_id(self, order_id):
         """Получает данные конкретного заказа по ID"""
         try:

@@ -230,7 +230,7 @@ class UpdateOrderFrame(QFrame):
                 item_layout.addWidget(name_label, 70)  # 70% ширины
                 
                 # Детали (артикул и количество)
-                details_label = QLabel(f"Арт: {item['article']}, Кол-во: {item['quantity']}")
+                details_label = QLabel(f"Арт: {item['article']}, Кол-во: {item['quantity']}, Цена: {item['price']} руб.")
                 details_label.setObjectName("cardText")
                 details_label.setStyleSheet("font-size: 12px; color: gray;")
                 details_label.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -357,7 +357,14 @@ class UpdateOrderFrame(QFrame):
 
         try:
             # Пробуем распарсить дату
-            self.parse_date(delivery_date)
+            parsed_date = self.parse_date(delivery_date)
+            create_date = self.parse_date(str(self.order_data.get('create_date', '')))
+            
+            # Проверяем, что дата выдачи не раньше даты заказа
+            if parsed_date < create_date:
+                Messages.send_C_message("Дата выдачи не может быть раньше даты заказа!", "Ошибка")
+                return False
+                
         except Exception:
             Messages.send_C_message("Введите корректную дату выдачи!", "Ошибка")
             return False

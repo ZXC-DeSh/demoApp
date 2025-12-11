@@ -321,6 +321,8 @@ class CreateOrderFrame(QFrame):
                 'items': self.order_items
             }
 
+            print(f"Создаем заказ с данными: {order_data}")
+
             # Создаем заказ в БД
             if self.database.create_new_order(order_data):
                 Messages.send_I_message("Заказ успешно создан!")
@@ -334,17 +336,32 @@ class CreateOrderFrame(QFrame):
 
         except Exception as e:
             Messages.send_C_message(f"Ошибка создания заказа: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def refresh_orders_window(self):
         """Обновляет данные в окне списка заказов"""
         try:
-            # Получаем существующий фрейм заказов из кэша
-            orders_frame = self.controller.frames_cache.get('OrdersCardsFrame')
-            if orders_frame:
-                # Вызываем существующий метод обновления
-                orders_frame.update_orders_display()
+            # Удаляем старый фрейм из кэша
+            if 'OrdersCardsFrame' in self.controller.frames_cache:
+                old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
+                if old_frame:
+                    old_frame.deleteLater()
+                print("Старый фрейм заказов удален из кэша")
+            
+            # Создаем новый фрейм
+            from FRAMES import OrdersCardsWindow
+            new_frame = OrdersCardsWindow.OrdersCardsFrame(self.controller)
+            self.controller.frames_cache['OrdersCardsFrame'] = new_frame
+            self.controller.frame_container.addWidget(new_frame)
+            self.controller.frame_container.setCurrentWidget(new_frame)
+            
+            print("Создан новый фрейм заказов с обновленными данными")
+            
         except Exception as e:
             print(f"Ошибка обновления списка заказов: {e}")
+            import traceback
+            traceback.print_exc()
 
     def validate_order_data(self):
         """Валидация данных заказа"""
@@ -362,7 +379,8 @@ class CreateOrderFrame(QFrame):
         
         try:
             delivery_date = self.parse_date(delivery_date_text)
-            if delivery_date < datetime.now().date():
+            current_date = datetime.now().date()
+            if delivery_date < current_date:
                 Messages.send_C_message("Дата выдачи не может быть в прошлом!", "Ошибка")
                 return False
         except ValueError:

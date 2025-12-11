@@ -42,9 +42,7 @@ class DatabaseConnection:
             print(e)
             return None
 
-    def check_user_login_password(self,
-                                  user_login: str,
-                                  user_password: str) -> bool:
+    def check_user_login_password(self, user_login: str, user_password: str) -> bool:
         """
         Метод проверки наличия пользователя в БД
         :param user_login: Логин введеный пользователем
@@ -71,10 +69,8 @@ class DatabaseConnection:
                 # Не найдено совпадений Логина И Пароля - Аккаунт не существует
                 return False
 
-            # Совпадения найдены
-            # Добавление активного логина в статический класс
-            Storage().set_user_login(existing_login)
-            Storage().set_user_role(existing_user_role)
+            Storage.set_user_login(existing_login)
+            Storage.set_user_role(existing_user_role)
             return True
         except Exception as e:
             print(f"Ошибка проверки пользователя: {e}")
@@ -86,13 +82,14 @@ class DatabaseConnection:
         :return: Словарь с данными
         """
         try:
+            user_login = Storage.get_user_login()
             query = """
             select *
             from Client
             where user_login = %s
             """
             cursor = self.connection.cursor()
-            cursor.execute(query, (Storage().get_user_login(),))
+            cursor.execute(query, (user_login,))
             result = dict()
             for answer in cursor.fetchall():
                 result["user_role"] = answer[0]

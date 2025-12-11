@@ -82,22 +82,41 @@ class LogInFrame(QFrame):
         if not self.login_edit.text().strip() or not self.password_edit.text().strip():
             Messages.send_W_message("Заполните все поля для входа!", "Внимание")
             return
-    
+
+        # Очищаем данные предыдущего пользователя
+        Storage.clear_all()
+        
         if self.database.check_user_login_password(user_login=self.login_edit.text(), user_password=self.password_edit.text()):
-            # Если вернулось true:
             print("Пользователь существует")
+            
+            # Удаляем старый закэшированный фрейм главной страницы
+            if 'HomeFrame' in self.controller.frames_cache:
+                old_frame = self.controller.frames_cache.pop('HomeFrame')
+                self.controller.frame_container.removeWidget(old_frame)
+                old_frame.deleteLater()
+                print("Старый фрейм HomeFrame удален из кэша")
+            
             # Переход в новое окно
             self.controller.switch_window(HomePageWindow.HomeFrame)
         else:
-            # Отправка сообщения об ошибке
             Messages.send_C_message("Ошибка входа! Проверьте Логин и Пароль!", "Ошибка авторизации")
 
     def guest_enter(self):
         """ Обработчик нажатия на кнопку guest_button """
         print(f"GUEST")
+        # Очищаем данные предыдущего пользователя
+        Storage.clear_all()
         # Установка роли - Гость
         Storage.set_user_role("Гость")
         Storage.set_user_login("guest")
+        
+        # Удаляем старый закэшированный фрейм главной страницы
+        if 'HomeFrame' in self.controller.frames_cache:
+            old_frame = self.controller.frames_cache.pop('HomeFrame')
+            self.controller.frame_container.removeWidget(old_frame)
+            old_frame.deleteLater()
+            print("Старый фрейм HomeFrame удален из кэша")
+        
         self.controller.switch_window(HomePageWindow.HomeFrame)
 
     def edit_text_pattern(self, placeholder_text: str, label_text: str) -> QLineEdit:

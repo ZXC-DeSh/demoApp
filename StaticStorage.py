@@ -4,10 +4,9 @@ class Storage:
 
     # Список действий для каждой роли
     roles_actions = {
-        # Администратору еще добавится блок с действиями над товарами
         "Администратор": ["Поиск", "Сортировка", "Фильтрация", "Заказы"],
         "Менеджер": ["Поиск", "Сортировка", "Фильтрация", "Заказы"],
-        "Авторизированный клиент": [],  # Он только просматривает, как и гость
+        "Авторизированный клиент": [],
         "Гость": []
     }
 
@@ -29,7 +28,7 @@ class Storage:
     def get_roles_action():
         if Storage.user_role and Storage.user_role in Storage.roles_actions:
             return Storage.roles_actions[Storage.user_role]
-        return []  # Возвращаем пустой список если роль не установлена
+        return []
 
     @staticmethod
     def set_user_login(new_login: str):

@@ -496,10 +496,10 @@ class HomeFrame(QFrame):
         if Messages.send_I_message("Вы точно хотите вернуться в окно авторизации?", 
                                 "Подтверждение выхода") < 20000:
             # Очищаем данные пользователя перед выходом
-            Storage.set_user_login(None)
-            Storage.set_user_role(None)
-            Storage.set_item_id(None)
-            Storage.set_order_id(None)
+            Storage.clear_all()
+            
+            # Удаляем закэшированные фреймы, кроме окна авторизации
+            self.controller.clear_cache_except(['LogInFrame'])
             
             from FRAMES import LogInWindow
             self.controller.switch_window(LogInWindow.LogInFrame)

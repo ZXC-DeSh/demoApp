@@ -12,29 +12,16 @@ from FRAMES import LogInWindow
 
 class MainApplicationClass(QMainWindow):
     def __init__(self):
-        # Подключение конструктора от "Родителя"
         super().__init__()
-        # Установка названия Приложения
         self.setWindowTitle("Обувь")
-
-        # Установка размеров окна
         self.setMinimumSize(600, 800)
-
-        # Создание подключения к базе данных
         self.db = Database.DatabaseConnection()
-
-        # Объявление первого фрейма - передаем self как controller
-        log_in_frame = LogInWindow.LogInFrame(controller=self)
-
+        log_in_frame = LogInWindow.LogInFrame(controller=self)        
         self.frame_container = QStackedWidget()
-        # Добавление первого фрейма в контейнер (чтобы он выводился при запуске окна)
         self.frame_container.addWidget(log_in_frame)
-        # Расположит self.frame_container по середине окна
-        self.setCentralWidget(self.frame_container)
-
-        # Словарь для хранения созданных фреймов
+        self.setCentralWidget(self.frame_container)        
         self.frames_cache = {}
-
+    
     def switch_window(self, goal_frame):
         """
         Метод смены окно в self.frame_container
@@ -54,7 +41,7 @@ class MainApplicationClass(QMainWindow):
         
         # Устанавливаем текущий фрейм
         self.frame_container.setCurrentWidget(frame)
-
+    
     def clear_cache_except(self, frame_names):
         """Очищает кэш фреймов, кроме указанных"""
         frames_to_remove = []
@@ -67,6 +54,15 @@ class MainApplicationClass(QMainWindow):
             self.frame_container.removeWidget(frame)
             frame.deleteLater()
             print(f"Удален фрейм из кэша: {name}")
+    
+    def update_cached_frame(self, frame_class):
+        """Обновляет конкретный фрейм в кэше"""
+        frame_class_name = frame_class.__name__
+        if frame_class_name in self.frames_cache:
+            old_frame = self.frames_cache.pop(frame_class_name)
+            self.frame_container.removeWidget(old_frame)
+            old_frame.deleteLater()
+            print(f"Обновлен фрейм в кэше: {frame_class_name}")
 
 application = QApplication(sys.argv)
 

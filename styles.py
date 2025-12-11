@@ -315,4 +315,11 @@ QMessageBox QPushButton:hover {
     color: black;
     border: 1px solid black;
 }
+
+#sale_text {
+    font-size: 22px;
+    color: black;
+    background: none;
+    qproperty-alignment: AlignCenter;
+}
 """

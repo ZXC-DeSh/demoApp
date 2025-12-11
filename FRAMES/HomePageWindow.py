@@ -131,6 +131,11 @@ class HomeFrame(QFrame):
 
         self.frame_layout.addWidget(header_widget)
 
+        # Отображение списка товаров
+        title = QLabel("Список товаров")
+        title.setObjectName("Title")
+        self.frame_layout.addWidget(title)
+
         """ 3й модуль
         Суть - создать децствия для Менеджера и Администратора
         Для того, чтобы каждый раз не проверять наличие действий у роли
@@ -158,7 +163,11 @@ class HomeFrame(QFrame):
         self.search_edit = None
         self.company_combo = None
         self.stock_combo = None
-        # Перебор списка
+        
+        # Флаг для кнопки "Заказы" - будем добавлять ее внизу
+        has_orders_action = False
+        
+        # Перебор списка действий
         for action in roles_actions_list:
             match (action):
                 case ("Поиск"):
@@ -168,21 +177,10 @@ class HomeFrame(QFrame):
                 case ("Фильтрация"):
                     self.create_filter_block()
                 case ("Заказы"):
-                    orders_button = QPushButton("Заказы")
-                    orders_button.setObjectName("button")
-                    orders_button.clicked.connect(
-                        lambda: self.controller.switch_window(
-                            OrdersCardsWindow.OrdersCardsFrame
-                        )
-                    )
-                    self.frame_layout.addWidget(orders_button)
+                    # Устанавливаем флаг, что кнопка "Заказы" нужна
+                    has_orders_action = True
                 case _:  # Аналог default
                     continue
-
-        # Отображение списка товаров
-        title = QLabel("Список товаров")
-        title.setObjectName("Title")
-        self.frame_layout.addWidget(title)
 
         # Создание области прокрутки для списка товаров
         self.scroll_area = QScrollArea()
@@ -198,6 +196,17 @@ class HomeFrame(QFrame):
                 lambda: self.controller.switch_window(CreateCardWindow.CreateCardFrame)
             )
             self.frame_layout.addWidget(create_card_btn)
+
+        # Кнопка "Заказы" (для менеджера и администратора)
+        if has_orders_action:
+            orders_button = QPushButton("Заказы")
+            orders_button.setObjectName("button")
+            orders_button.clicked.connect(
+                lambda: self.controller.switch_window(
+                    OrdersCardsWindow.OrdersCardsFrame
+                )
+            )
+            self.frame_layout.addWidget(orders_button)
 
     def create_sort_block(self):
         """ Метод создания блока сортировки по количеству на складе"""
@@ -428,8 +437,15 @@ class HomeFrame(QFrame):
         widget.setObjectName("sale_widget")
         widget.setFixedWidth(100)
         widget_layout = QVBoxLayout(widget)
-
-        widget_layout.addWidget(QLabel(sale_count + "%", objectName="sale_count"))
+        
+        # Создаем один лейбл с двумя строками
+        discount_label = QLabel(f"Скидка:\n{sale_count}%")
+        discount_label.setObjectName("sale_text")
+        discount_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Добавляем виджет
+        widget_layout.addWidget(discount_label)
+        
         return widget
 
     def create_picture(self, picture_name: str) -> QLabel:

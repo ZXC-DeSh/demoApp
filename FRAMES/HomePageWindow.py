@@ -94,7 +94,7 @@ class HomeFrame(QFrame):
         header_widget_hbox.addWidget(back_header_btn)
         header_widget_hbox.addStretch()
 
-        # ЛОГОТИП по центру
+        # Логотип по центру
         logo_label = QLabel()
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         

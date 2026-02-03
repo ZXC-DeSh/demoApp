@@ -302,6 +302,14 @@ class HomeFrame(QFrame):
         cards_container = QWidget()
         cards_container_layout = QVBoxLayout(cards_container)
 
+        if not items_list:
+            # Если товаров не найдено
+            no_items_label = QLabel("Такого товара не найдено")
+            no_items_label.setObjectName("Title")
+            no_items_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cards_container_layout.addWidget(no_items_label)
+            return cards_container
+
         for item in items_list:
             item_card = QWidget()
             item_card.setObjectName("item_card")

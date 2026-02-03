@@ -1,18 +1,21 @@
 import psycopg
 from DATABASE.config import *
 from StaticStorage import Storage
+import logging
 
 
 class DatabaseConnection:
     def __init__(self):
         """ Конструктор класса """
+        logging.info("Инициализация подключения к базе данных")
         self.connection = self.connect_to_database()
         # Восстанавливаем транзакцию при инициализации
         if self.connection:
             try:
                 self.connection.rollback()
-            except:
-                pass
+                logging.info("Транзакция восстановлена")
+            except Exception as e:
+                logging.error(f"Ошибка восстановления транзакции: {e}")
 
     def ensure_connection(self):
         """Восстанавливает соединение если транзакция сломана"""
@@ -21,8 +24,10 @@ class DatabaseConnection:
             cursor = self.connection.cursor()
             cursor.execute("SELECT 1")
             cursor.close()
-        except Exception:
+            logging.info("Соединение с БД активно")
+        except Exception as e:
             # Если запрос не прошел, восстанавливаем соединение
+            logging.warning(f"Восстановление соединения с БД: {e}")
             self.connection.rollback()
 
     def connect_to_database(self):
@@ -35,11 +40,11 @@ class DatabaseConnection:
                 host=host_address,
                 dbname=database_name
             )
-            print(f"Подключено! {connection}")
+            logging.info(f"Подключено к БД: {connection}")
             return connection
         except Exception as e:
             # Ошибка при подключении
-            print(e)
+            logging.error(f"Ошибка подключения к БД: {e}")
             return None
 
     def check_user_login_password(self, user_login: str, user_password: str) -> bool:
@@ -50,6 +55,7 @@ class DatabaseConnection:
         :return: True - пользователь есть | False - пользователя нет
         """
         try:
+            logging.info(f"Проверка авторизации пользователя: {user_login}")
             query = """
             select user_login, user_role
             from Client
@@ -67,13 +73,15 @@ class DatabaseConnection:
             
             if existing_login == "":
                 # Не найдено совпадений Логина И Пароля - Аккаунт не существует
+                logging.warning(f"Пользователь {user_login} не найден или пароль неверен")
                 return False
 
             Storage.set_user_login(existing_login)
             Storage.set_user_role(existing_user_role)
+            logging.info(f"Пользователь {user_login} успешно авторизован, роль: {existing_user_role}")
             return True
         except Exception as e:
-            print(f"Ошибка проверки пользователя: {e}")
+            logging.error(f"Ошибка проверки пользователя: {e}")
             return False
 
     def take_user_data(self) -> dict:
@@ -83,6 +91,7 @@ class DatabaseConnection:
         """
         try:
             user_login = Storage.get_user_login()
+            logging.info(f"Получение данных пользователя: {user_login}")
             query = """
             select *
             from Client
@@ -100,12 +109,13 @@ class DatabaseConnection:
 
             if result == dict():
                 # Если ответ из БД - пустой, значит входил гость
-                print("NO one")
+                logging.info("Вход выполнен как гость")
                 result["user_role"] = "Гость"
                 result["user_name"] = "Аккаунт Гостя"
+            logging.info(f"Данные пользователя получены: {result['user_name']}")
             return result
         except Exception as e:
-            print(f"Ошибка получения данных пользователя: {e}")
+            logging.error(f"Ошибка получения данных пользователя: {e}")
             return {"user_role": "Гость", "user_name": "Аккаунт Гостя"}
 
     def get_all_items(self):
@@ -114,6 +124,7 @@ class DatabaseConnection:
         :return: list(dict())
         """
         try:
+            logging.info("Запрос на получение всех товаров из БД")
             query = """
             select *
             from Items
@@ -143,9 +154,10 @@ class DatabaseConnection:
                     }
                 )
             cursor.close()
+            logging.info(f"Получено товаров из БД: {len(result)}")
             return result
         except Exception as e:
-            print(f"Ошибка получения товаров: {e}")
+            logging.error(f"Ошибка получения товаров: {e}")
             return []
 
     def search_and_filter_items(self,
@@ -154,6 +166,7 @@ class DatabaseConnection:
         sort_by_count: bool = False,
         sort_ascending: bool = True):
         try:
+            logging.info(f"Поиск товаров: текст='{search_text}', фильтр='{company_filter}', сортировка по кол-ву={sort_by_count}")
             query = """
                 SELECT 
                     item_id, item_article, item_name, item_edinica, item_cost,
@@ -226,9 +239,10 @@ class DatabaseConnection:
                     "picture": picture,
                 })
             cursor.close()
+            logging.info(f"Поиск завершен, найдено товаров: {len(result)}")
             return result
         except Exception as e:
-            print(f"Ошибка поиска товаров: {e}")
+            logging.error(f"Ошибка поиска товаров: {e}")
             return []
 
     def take_all_deliveryman(self):
@@ -237,6 +251,7 @@ class DatabaseConnection:
         :return: Список поставщиков
         """
         try:
+            logging.info("Запрос всех поставщиков из БД")
             cursor = self.connection.cursor()
             cursor.execute("""
             SELECT DISTINCT item_deliveryman
@@ -248,9 +263,10 @@ class DatabaseConnection:
             for answer in cursor.fetchall():
                 result.append(answer[0])
             cursor.close()
+            logging.info(f"Получено поставщиков: {len(result)-1}")
             return result
         except Exception as e:
-            print(f"Ошибка получения поставщиков: {e}")
+            logging.error(f"Ошибка получения поставщиков: {e}")
             return ["Все поставщики"]
 
     def take_item_single_info(self):
@@ -259,13 +275,15 @@ class DatabaseConnection:
         :return: dict()
         """
         try:
+            item_id = Storage.get_item_id()
+            logging.info(f"Запрос данных товара ID: {item_id}")
             query = """
             select *
             from Items
             where item_id = %s
             """
             cursor = self.connection.cursor()
-            cursor.execute(query, (Storage.get_item_id(),))
+            cursor.execute(query, (item_id,))
             result = dict()
             for answer in cursor.fetchall():
                 result = {
@@ -283,9 +301,10 @@ class DatabaseConnection:
                     "picture": answer[11] or ""
                 }
             cursor.close()
+            logging.info(f"Данные товара получены: {result.get('name', 'Неизвестно')}")
             return result
         except Exception as e:
-            print(f"Ошибка получения данных товара: {e}")
+            logging.error(f"Ошибка получения данных товара: {e}")
             # В случае ошибки сбрасываем транзакцию
             self.connection.rollback()
             return {}
@@ -298,6 +317,9 @@ class DatabaseConnection:
         :return: Bool
         """
         try:
+            item_id = Storage.get_item_id()
+            logging.info(f"Обновление товара ID: {item_id}, фото: {picture_name}")
+            
             # Восстанавливаем соединение
             self.connection.rollback()
             
@@ -319,8 +341,7 @@ class DatabaseConnection:
             
             # Проверяем количество параметров
             if len(user_input_data) != 10:
-                print(f"ОШИБКА: ожидалось 10 параметров, получено {len(user_input_data)}")
-                print(f"user_input_data: {user_input_data}")
+                logging.error(f"ОШИБКА: ожидалось 10 параметров, получено {len(user_input_data)}")
                 return False
             
             # Подготавливаем параметры
@@ -336,7 +357,7 @@ class DatabaseConnection:
                 int(user_input_data[7]) if user_input_data[7] else 0,  # item_sale
                 int(user_input_data[8]) if user_input_data[8] else 0,  # item_count
                 user_input_data[9],  # item_information
-                Storage.get_item_id()  # WHERE item_id
+                item_id  # WHERE item_id
             ]
             
             cursor = self.connection.cursor()
@@ -344,12 +365,11 @@ class DatabaseConnection:
             self.connection.commit()
             cursor.close()
             
-            print(f"Товар успешно обновлен в БД: ID={Storage.get_item_id()}")
-            print(f"Новое имя файла: {picture_name}")
+            logging.info(f"Товар успешно обновлен в БД: ID={item_id}, фото={picture_name}")
             return True
             
         except Exception as e:
-            print(f"Ошибка обновления товара: {e}")
+            logging.error(f"Ошибка обновления товара: {e}")
             import traceback
             traceback.print_exc()
             self.connection.rollback()
@@ -365,6 +385,7 @@ class DatabaseConnection:
         :return: bool
         """
         try:
+            logging.info(f"Создание нового товара: артикул={user_input[0]}, фото={picture_name}")
             query = """
             insert into Items (
             item_article,
@@ -384,9 +405,10 @@ class DatabaseConnection:
             cursor.execute(query, tuple(map(str, user_input)) + (picture_name,))
             self.connection.commit()
             cursor.close()
+            logging.info("Товар успешно создан в БД")
             return True
         except Exception as e:
-            print("Error:", e)
+            logging.error(f"Ошибка создания товара: {e}")
             self.connection.rollback()
             return False
 
@@ -397,14 +419,18 @@ class DatabaseConnection:
         :return: bool
         """
         try:
+            item_id = Storage.get_item_id()
+            logging.info(f"Запрос на удаление товара: ID={item_id}, артикул={item_article}")
             cursor = self.connection.cursor()
             # Проверка, что товара нет в заказах
             cursor.execute("""
             SELECT COUNT(*) FROM OrderItems WHERE product_article = %s
             """, (item_article,))
             
-            if cursor.fetchone()[0] != 0:
+            count = cursor.fetchone()[0]
+            if count != 0:
                 cursor.close()
+                logging.warning(f"Товар {item_article} используется в {count} заказах, удаление отменено")
                 return False
             
             # Если в ответе от бд есть хоть 1 элемент - отклонение запроса
@@ -413,12 +439,13 @@ class DatabaseConnection:
                     delete 
                     FROM Items
                     WHERE item_id = %s
-                    """, (Storage.get_item_id(),))
+                    """, (item_id,))
             self.connection.commit()
             cursor.close()
+            logging.info(f"Товар успешно удален из БД: ID={item_id}")
             return True
         except Exception as e:
-            print(f"Ошибка удаления товара: {e}")
+            logging.error(f"Ошибка удаления товара: {e}")
             self.connection.rollback()
             return False
 
@@ -430,6 +457,7 @@ class DatabaseConnection:
         :return: list()
         """
         try:
+            logging.info(f"Получение данных для комбобокса: {type_of_data}")
             # По умолчанию - выбираем все колонки
             # Но 100% будет 1 из вариантов Условного Опператора
             column_name = "*"
@@ -456,14 +484,16 @@ class DatabaseConnection:
                 result.append(str(answer[0]))
 
             cursor.close()
+            logging.info(f"Получено значений для комбобокса {type_of_data}: {len(result)}")
             return result
         except Exception as e:
-            print(f"Ошибка получения данных для комбобокса: {e}")
+            logging.error(f"Ошибка получения данных для комбобокса: {e}")
             return []
 
     def take_all_orders_rows(self):
         """Получает все заказы для отображения в списке"""
         try:
+            logging.info("Запрос всех заказов из БД")
             cursor = self.connection.cursor()
             
             query = """
@@ -493,11 +523,11 @@ class DatabaseConnection:
                     'client_name': row[5]
                 })
             
-            print(f"Успешно получено заказов: {len(result)}")
+            logging.info(f"Успешно получено заказов: {len(result)}")
             return result
             
         except Exception as e:
-            print(f"Ошибка получения всех заказов: {e}")
+            logging.error(f"Ошибка получения всех заказов: {e}")
             return []
 
     def take_single_order_data(self):
@@ -505,18 +535,19 @@ class DatabaseConnection:
         try:
             order_id = Storage.get_order_id()
             if not order_id:
-                print("Нет order_id в Storage")
+                logging.warning("Нет order_id в Storage")
                 return {}
                 
             return self.get_order_by_id(order_id)
             
         except Exception as e:
-            print(f"Ошибка в take_single_order_data: {e}")
+            logging.error(f"Ошибка в take_single_order_data: {e}")
             return {}
 
     def take_pvz_address(self, pvz_id):
         """Получает адрес ПВЗ по ID"""
         try:
+            logging.info(f"Запрос адреса ПВЗ ID: {pvz_id}")
             cursor = self.connection.cursor()
             query = "SELECT pvz_address FROM pvz WHERE pvz_id = %s"
             cursor.execute(query, (pvz_id,))
@@ -524,16 +555,19 @@ class DatabaseConnection:
             cursor.close()
             
             if result:
+                logging.info(f"Адрес ПВЗ найден: {result[0]}")
                 return result[0]
             else:
+                logging.warning(f"Адрес ПВЗ не найден: {pvz_id}")
                 return "Адрес не найден"
         except Exception as e:
-            print(f"Ошибка получения адреса ПВЗ: {e}")
+            logging.error(f"Ошибка получения адреса ПВЗ: {e}")
             return "Ошибка загрузки адреса"
 
     def take_all_pvz_addresses(self):
         """Получает все адреса ПВЗ для выпадающего списка"""
         try:
+            logging.info("Запрос всех адресов ПВЗ")
             cursor = self.connection.cursor()
             query = "SELECT pvz_id, pvz_address FROM pvz ORDER BY pvz_id"
             cursor.execute(query)
@@ -542,9 +576,10 @@ class DatabaseConnection:
             
             # Формируем строки в формате "ID | Адрес"
             result = [f"{row[0]} | {row[1]}" for row in rows]
+            logging.info(f"Получено адресов ПВЗ: {len(result)}")
             return result
         except Exception as e:
-            print(f"Ошибка получения адресов ПВЗ: {e}")
+            logging.error(f"Ошибка получения адресов ПВЗ: {e}")
             return []
 
     def take_all_statuses(self):
@@ -553,6 +588,7 @@ class DatabaseConnection:
         :return: list()
         """
         try:
+            logging.info("Запрос всех статусов заказов")
             cursor = self.connection.cursor()
             cursor.execute(
                 """
@@ -562,14 +598,16 @@ class DatabaseConnection:
             )
             result = [str(i[0]) for i in cursor.fetchall()]
             cursor.close()
+            logging.info(f"Получено статусов заказов: {len(result)}")
             return result
         except Exception as e:
-            print(f"Ошибка получения статусов: {e}")
+            logging.error(f"Ошибка получения статусов: {e}")
             return ["Новый", "Завершен"]
 
     def get_order_items(self, order_id):
         """Получает товары заказа"""
         try:
+            logging.info(f"Запрос товаров заказа ID: {order_id}")
             cursor = self.connection.cursor()
             
             query = """
@@ -594,15 +632,17 @@ class DatabaseConnection:
                     'name': row[2] if row[2] else 'Товар не найден'
                 })
             
+            logging.info(f"Получено товаров для заказа {order_id}: {len(result)}")
             return result
             
         except Exception as e:
-            print(f"Ошибка получения товаров заказа: {e}")
+            logging.error(f"Ошибка получения товаров заказа: {e}")
             return []
 
     def get_order_items_with_prices(self, order_id):
         """Получает товары заказа с ценами"""
         try:
+            logging.info(f"Запрос товаров заказа с ценами ID: {order_id}")
             cursor = self.connection.cursor()
             
             query = """
@@ -629,27 +669,31 @@ class DatabaseConnection:
                     'price': row[3] if row[3] else 0
                 })
             
+            logging.info(f"Получено товаров с ценами: {len(result)}")
             return result
             
         except Exception as e:
-            print(f"Ошибка получения товаров заказа с ценами: {e}")
+            logging.error(f"Ошибка получения товаров заказа с ценами: {e}")
             return []
 
     def check_product_in_orders(self, product_article):
         """Проверяет, используется ли товар в заказах"""
         try:
+            logging.info(f"Проверка использования товара в заказах: {product_article}")
             cursor = self.connection.cursor()
             cursor.execute("SELECT COUNT(*) FROM OrderItems WHERE product_article = %s", (product_article,))
             count = cursor.fetchone()[0]
             cursor.close()
+            logging.info(f"Товар {product_article} используется в {count} заказах")
             return count > 0
         except Exception as e:
-            print(f"Ошибка проверки товара в заказах: {e}")
+            logging.error(f"Ошибка проверки товара в заказах: {e}")
             return False
 
     def create_new_order(self, order_data):
         """Создает новый заказ в БД"""
         try:
+            logging.info(f"Создание нового заказа: ПВЗ={order_data['pvz_id']}, статус={order_data['status']}")
             cursor = self.connection.cursor()
             
             # Генерируем артикул заказа на основе ID
@@ -674,7 +718,7 @@ class DatabaseConnection:
             ))
             
             order_id = cursor.fetchone()[0]
-            print(f"Создан заказ с ID: {order_id}")
+            logging.info(f"Создан заказ с ID: {order_id}")
             
             # Вставляем товары заказа
             items_query = """
@@ -684,7 +728,7 @@ class DatabaseConnection:
             
             for item in order_data['items']:
                 cursor.execute(items_query, (order_id, item['article'], item['quantity']))
-                print(f"Добавлен товар {item['article']} x{item['quantity']}")
+                logging.info(f"Добавлен товар {item['article']} x{item['quantity']}")
                 
                 # Уменьшаем количество товара на складе
                 update_query = """
@@ -697,11 +741,11 @@ class DatabaseConnection:
             self.connection.commit()
             cursor.close()
             
-            print(f"Заказ успешно создан! ID: {order_id}")
+            logging.info(f"Заказ успешно создан! ID: {order_id}, товаров: {len(order_data['items'])}")
             return True
             
         except Exception as e:
-            print(f"Ошибка создания заказа: {e}")
+            logging.error(f"Ошибка создания заказа: {e}")
             import traceback
             traceback.print_exc()
             self.connection.rollback()
@@ -710,6 +754,7 @@ class DatabaseConnection:
     def update_order_data(self, order_data):
         """Обновляет данные заказа"""
         try:
+            logging.info(f"Обновление заказа ID: {order_data['id']}")
             cursor = self.connection.cursor()
             
             query = """
@@ -731,17 +776,18 @@ class DatabaseConnection:
             self.connection.commit()
             cursor.close()
             
-            print(f"Заказ {order_data['id']} успешно обновлен")
+            logging.info(f"Заказ {order_data['id']} успешно обновлен")
             return True
             
         except Exception as e:
-            print(f"Ошибка обновления заказа: {e}")
+            logging.error(f"Ошибка обновления заказа: {e}")
             self.connection.rollback()
             return False
 
     def delete_order(self, order_id):
         """Удаляет заказ"""
         try:
+            logging.info(f"Удаление заказа ID: {order_id}")
             cursor = self.connection.cursor()
             
             # Сначала возвращаем товары на склад
@@ -752,6 +798,7 @@ class DatabaseConnection:
             """, (order_id,))
             
             items = cursor.fetchall()
+            logging.info(f"Товаров для возврата на склад: {len(items)}")
             for article, quantity in items:
                 cursor.execute("""
                 UPDATE Items 
@@ -764,15 +811,18 @@ class DatabaseConnection:
             
             self.connection.commit()
             cursor.close()
+            logging.info(f"Заказ {order_id} успешно удален")
             return True
         except Exception as e:
-            print(f"Ошибка удаления заказа: {e}")
+            logging.error(f"Ошибка удаления заказа: {e}")
             self.connection.rollback()
             return False
 
     def get_order_by_id(self, order_id):
         """Получает данные конкретного заказа по ID"""
         try:
+            logging.info(f"Запрос данных заказа ID: {order_id}")
+
             cursor = self.connection.cursor()
 
             query = """
@@ -788,13 +838,12 @@ class DatabaseConnection:
             WHERE order_id = %s
             """
             
-            print(f"Выполняем запрос заказа ID: {order_id}")
             cursor.execute(query, (order_id,))
             result = cursor.fetchone()
             cursor.close()
             
             if result:
-                print(f"Найден заказ: {result}")
+                logging.info(f"Найден заказ: ID={result[0]}, статус={result[4]}")
                 return {
                     'id': result[0],
                     'create_date': result[1],
@@ -805,11 +854,11 @@ class DatabaseConnection:
                     'code': result[6]
                 }
             else:
-                print(f"Заказ с ID {order_id} не найден")
+                logging.warning(f"Заказ с ID {order_id} не найден")
                 return None
                 
         except Exception as e:
-            print(f"Ошибка получения заказа по ID: {e}")
+            logging.error(f"Ошибка получения заказа по ID: {e}")
             import traceback
             traceback.print_exc()
             return None

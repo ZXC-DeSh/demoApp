@@ -10,6 +10,7 @@ from StaticStorage import Storage
 import os
 import shutil
 import time
+import logging
 
 
 class CreateCardFrame(QFrame):
@@ -119,18 +120,34 @@ class CreateCardFrame(QFrame):
         save_btn.clicked.connect(self.save_new_product)
         self.frame_layout.addWidget(save_btn)
 
+        test_frame = QWidget()
+        test_layout = QHBoxLayout(test_frame)
+        test_layout.setContentsMargins(0, 0, 0, 0)
+
+        positive_test_btn = QPushButton("Положительный тест")
+        positive_test_btn.setObjectName("test_button")
+        positive_test_btn.clicked.connect(self.run_positive_test)
+        test_layout.addWidget(positive_test_btn)
+
+        negative_test_btn = QPushButton("Отрицательный тест")
+        negative_test_btn.setObjectName("test_button")
+        negative_test_btn.clicked.connect(self.run_negative_test)
+        test_layout.addWidget(negative_test_btn)
+
+        self.frame_layout.addWidget(test_frame)
+
     def create_input_fields(self):
-        """Создает поля для ввода данных"""
+        """Создает поля для ввода данных в порядке как в таблице БД"""
         fields = [
             ("article", "Артикул товара", "Укажите артикул", False),
             ("name", "Наименование товара", "Укажите наименование", False),
-            ("category", "Категория товара", "Выберите категорию", True),
-            ("cost", "Стоимость товара", "0.00", False),
-            ("count", "Количество на складе", "0", False),
-            ("sale", "Скидка (%)", "0", False),
             ("unit", "Единица измерения", "шт.", False),
+            ("cost", "Стоимость товара", "0.00", False),
             ("deliveryman", "Поставщик", "Выберите поставщика", True),
             ("creator", "Производитель", "Выберите производителя", True),
+            ("category", "Категория товара", "Выберите категорию", True),
+            ("sale", "Скидка (%)", "0", False),
+            ("count", "Количество на складе", "0", False),
             ("information", "Описание товара", "Введите описание", False)
         ]
 
@@ -146,6 +163,8 @@ class CreateCardFrame(QFrame):
             
             self.input_fields[key] = field_widget
             self.container_layout.addWidget(widget)
+
+        return widget
 
     def create_input_field(self, label_text, placeholder):
         """Создает поле ввода и возвращает (виджет, поле_ввода)"""
@@ -295,20 +314,17 @@ class CreateCardFrame(QFrame):
             print(f"Ошибка обновления главного окна: {e}")
 
     def collect_input_data(self):
-        """Собирает и валидирует данные из полей ввода"""
+        """Собирает и валидирует данные из полей ввода в ПРАВИЛЬНОМ порядке для БД"""
         data = []
         
-        # Артикул
+        # 1. Артикул (item_article)
         article_field = self.input_fields['article']
         article = article_field.text().strip()
         if not article:
-            Messages.send_W_message("Рекомендуется указать артикул товара. Поле будет заполнено автоматически.", 
-                                  "Рекомендация")
-            # Генерируем артикул автоматически
             article = f"ART_{int(time.time()) % 1000000}"
         data.append(article)
 
-        # Наименование
+        # 2. Наименование (item_name)
         name_field = self.input_fields['name']
         name = name_field.text().strip()
         if not name:
@@ -316,15 +332,15 @@ class CreateCardFrame(QFrame):
             return None
         data.append(name)
 
-        # Категория
-        category_field = self.input_fields['category']
-        category = category_field.currentText() if category_field.currentText() else ""
-        if not category:
-            Messages.send_C_message("Выберите категорию товара!", "Обязательное поле")
+        # 3. Единица измерения (item_edinica)
+        unit_field = self.input_fields['unit']
+        unit = unit_field.text().strip() if isinstance(unit_field, QLineEdit) else unit_field.currentText()
+        if not unit:
+            Messages.send_C_message("Введите единицу измерения!", "Обязательное поле")
             return None
-        data.append(category)
+        data.append(unit)
 
-        # Стоимость
+        # 4. Стоимость (item_cost)
         cost_field = self.input_fields['cost']
         cost_text = cost_field.text().strip()
         try:
@@ -337,40 +353,82 @@ class CreateCardFrame(QFrame):
             Messages.send_C_message("Введите корректную стоимость!", "Ошибка")
             return None
 
-        # Остальные поля
-        fields = [
-            ('deliveryman', 'Поставщик'),
-            ('creator', 'Производитель'), 
-            ('sale', 'Скидка'),
-            ('count', 'Количество'),
-            ('unit', 'Единица измерения'),
-            ('information', 'Описание')
+        # 5. Поставщик (item_deliveryman) ← ВАЖНО: это 5-я позиция!
+        deliveryman_field = self.input_fields['deliveryman']
+        deliveryman = deliveryman_field.currentText() if isinstance(deliveryman_field, QComboBox) else deliveryman_field.text()
+        if not deliveryman:
+            Messages.send_C_message("Выберите поставщика!", "Обязательное поле")
+            return None
+        data.append(deliveryman)
+
+        # 6. Производитель (item_creator)
+        creator_field = self.input_fields['creator']
+        creator = creator_field.currentText() if isinstance(creator_field, QComboBox) else creator_field.text()
+        if not creator:
+            Messages.send_C_message("Выберите производителя!", "Обязательное поле")
+            return None
+        data.append(creator)
+
+        # 7. Категория (item_category)
+        category_field = self.input_fields['category']
+        category = category_field.currentText() if category_field.currentText() else ""
+        if not category:
+            Messages.send_C_message("Выберите категорию товара!", "Обязательное поле")
+            return None
+        data.append(category)
+
+        # 8. Скидка (item_sale) ← ВАЖНО: это 8-я позиция и должно быть ЧИСЛО!
+        sale_field = self.input_fields['sale']
+        sale_text = sale_field.text().strip()
+        try:
+            # Убираем символ % если пользователь его ввел
+            sale_text = sale_text.replace('%', '').strip()
+            sale = int(sale_text) if sale_text else 0
+            if sale < 0 or sale > 100:
+                Messages.send_C_message("Скидка должна быть от 0 до 100%!", "Ошибка")
+                return None
+            data.append(str(sale))
+        except ValueError:
+            Messages.send_C_message("Введите корректное значение скидки (целое число от 0 до 100)!", "Ошибка")
+            return None
+
+        # 9. Количество (item_count)
+        count_field = self.input_fields['count']
+        count_text = count_field.text().strip()
+        try:
+            count = int(count_text) if count_text else 0
+            if count < 0:
+                Messages.send_C_message("Количество не может быть отрицательным!", "Ошибка")
+                return None
+            data.append(str(count))
+        except ValueError:
+            Messages.send_C_message("Введите корректное количество!", "Ошибка")
+            return None
+
+        # 10. Описание (item_information)
+        info_field = self.input_fields['information']
+        information = info_field.text().strip()
+        if not information:
+            information = "Описание отсутствует"
+        data.append(information)
+
+        # Отладка: выводим собранные данные
+        logging.info(f"Собранные данные для создания товара:")
+        field_names = [
+            "Артикул", "Наименование", "Единица измерения", "Стоимость",
+            "Поставщик", "Производитель", "Категория", "Скидка", 
+            "Количество", "Описание"
         ]
-
-        for field_key, field_name in fields:
-            field_widget = self.input_fields[field_key]
-            
-            if isinstance(field_widget, QComboBox):
-                value = field_widget.currentText()
-            else:
-                value = field_widget.text()
-            
-            if field_key in ['sale', 'count']:
-                try:
-                    num_value = int(value) if value else 0
-                    if num_value < 0:
-                        Messages.send_C_message(f"{field_name} не может быть отрицательной!", "Ошибка")
-                        return None
-                    data.append(str(num_value))
-                except ValueError:
-                    Messages.send_C_message(f"Введите корректное значение для {field_name}!", "Ошибка")
-                    return None
-            else:
-                if not value and field_key in ['deliveryman', 'creator', 'unit']:
-                    Messages.send_C_message(f"Заполните поле '{field_name}'!", "Ошибка")
-                    return None
-                data.append(value)
-
+        
+        for i, (field_name, value) in enumerate(zip(field_names, data), 1):
+            logging.info(f"{i}. {field_name}: {value}")
+        
+        # Проверяем количество параметров
+        if len(data) != 10:
+            logging.error(f"ОШИБКА: ожидается 10 параметров, получено {len(data)}")
+            Messages.send_C_message(f"Ошибка: собрано {len(data)} параметров вместо 10!", "Ошибка")
+            return None
+        
         return data
 
     def check_article_unique(self, article):

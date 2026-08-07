@@ -268,17 +268,18 @@ class HomeFrame(QFrame):
         layout = QHBoxLayout(widget)
 
         # Фильтр по поставщику
+        layout.addWidget(QLabel("Поставщик:", objectName="UpdateTextHint"))
+        
         self.company_combo = QComboBox()
         self.company_combo.setObjectName("company_filter")
-
-        # Подгрузка списока поставщиков из БД
+        
+        # Подгрузка списка поставщиков из БД
         deliveryman = self.database.take_all_deliveryman()  # Список поставщиков из Таблицы
         self.company_combo.addItems(deliveryman)
-
+        
         # Подключаем обработчик с проверкой на "Все поставщики"
         self.company_combo.currentIndexChanged.connect(self.on_company_filter_changed)
         
-        layout.addWidget(QLabel("Поставщик:", objectName="UpdateTextHint"))
         layout.addWidget(self.company_combo)
         layout.addStretch()
         

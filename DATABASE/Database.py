@@ -1,7 +1,8 @@
+import logging
+import traceback
 import psycopg
 from DATABASE.config import *
 from StaticStorage import Storage
-import logging
 
 
 class DatabaseConnection:
@@ -9,7 +10,6 @@ class DatabaseConnection:
         """ Конструктор класса """
         logging.info("Инициализация подключения к базе данных")
         self.connection = self.connect_to_database()
-        # Восстанавливаем транзакцию при инициализации
         if self.connection:
             try:
                 self.connection.rollback()
@@ -20,20 +20,17 @@ class DatabaseConnection:
     def ensure_connection(self):
         """Восстанавливает соединение если транзакция сломана"""
         try:
-            # Пробуем выполнить простой запрос
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT 1")
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
             logging.info("Соединение с БД активно")
         except Exception as e:
-            # Если запрос не прошел, восстанавливаем соединение
             logging.warning(f"Восстановление соединения с БД: {e}")
-            self.connection.rollback()
+            if self.connection:
+                self.connection.rollback()
 
     def connect_to_database(self):
         """ Подключение к базе данных на сервере """
         try:
-            # Подключение
             connection = psycopg.connect(
                 user=user_name,
                 password=user_password,
@@ -43,7 +40,6 @@ class DatabaseConnection:
             logging.info(f"Подключено к БД: {connection}")
             return connection
         except Exception as e:
-            # Ошибка при подключении
             logging.error(f"Ошибка подключения к БД: {e}")
             return None
 
@@ -62,17 +58,15 @@ class DatabaseConnection:
             where user_login = %s
                 and user_password = %s
             """
-            cursor = self.connection.cursor()
-            cursor.execute(query, (user_login, user_password))
             existing_login = ""
             existing_user_role = ""
-            for answer in cursor.fetchall():
-                existing_login = answer[0]
-                existing_user_role = answer[1]
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (user_login, user_password))
+                for answer in cursor.fetchall():
+                    existing_login = answer[0]
+                    existing_user_role = answer[1]
             
             if existing_login == "":
-                # Не найдено совпадений Логина И Пароля - Аккаунт не существует
                 logging.warning(f"Пользователь {user_login} не найден или пароль неверен")
                 return False
 
@@ -97,18 +91,16 @@ class DatabaseConnection:
             from Client
             where user_login = %s
             """
-            cursor = self.connection.cursor()
-            cursor.execute(query, (user_login,))
             result = dict()
-            for answer in cursor.fetchall():
-                result["user_role"] = answer[0]
-                result["user_name"] = answer[1]
-                result["user_login"] = answer[2]
-                result["user_password"] = answer[3]
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (user_login,))
+                for answer in cursor.fetchall():
+                    result["user_role"] = answer[0]
+                    result["user_name"] = answer[1]
+                    result["user_login"] = answer[2]
+                    result["user_password"] = answer[3]
 
             if result == dict():
-                # Если ответ из БД - пустой, значит входил гость
                 logging.info("Вход выполнен как гость")
                 result["user_role"] = "Гость"
                 result["user_name"] = "Аккаунт Гостя"
@@ -130,30 +122,28 @@ class DatabaseConnection:
             from Items
             """
             result = []
-            cursor = self.connection.cursor()
-            cursor.execute(query)
-            for answer in cursor.fetchall():
-                picture = answer[11]
-                if picture == "" or picture is None:
-                    picture = "picture.png"
-                result.append(
-                    # Добавление словаря для каждого товара в список
-                    {
-                        "id": answer[0],
-                        "article": answer[1],
-                        "name": answer[2],
-                        "edinica": answer[3],
-                        "cost": answer[4],
-                        "deliveryman": answer[5],
-                        "creator": answer[6],
-                        "category": answer[7],
-                        "sale": answer[8],
-                        "count": answer[9],
-                        "information": answer[10],
-                        "picture": picture,
-                    }
-                )
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query)
+                for answer in cursor.fetchall():
+                    picture = answer[11]
+                    if picture == "" or picture is None:
+                        picture = "picture.png"
+                    result.append(
+                        {
+                            "id": answer[0],
+                            "article": answer[1],
+                            "name": answer[2],
+                            "edinica": answer[3],
+                            "cost": answer[4],
+                            "deliveryman": answer[5],
+                            "creator": answer[6],
+                            "category": answer[7],
+                            "sale": answer[8],
+                            "count": answer[9],
+                            "information": answer[10],
+                            "picture": picture,
+                        }
+                    )
             logging.info(f"Получено товаров из БД: {len(result)}")
             return result
         except Exception as e:
@@ -161,10 +151,10 @@ class DatabaseConnection:
             return []
 
     def search_and_filter_items(self,
-        search_text: str = "",
-        company_filter: str = "",
-        sort_by_count: bool = False,
-        sort_ascending: bool = True):
+                                search_text: str = "",
+                                company_filter: str = "",
+                                sort_by_count: bool = False,
+                                sort_ascending: bool = True):
         try:
             logging.info(f"Поиск товаров: текст='{search_text}', фильтр='{company_filter}', сортировка по кол-ву={sort_by_count}")
             query = """
@@ -177,15 +167,11 @@ class DatabaseConnection:
             """
             params = []
 
-            # Поиск по тексту (регистронезависимо в PostgreSQL — ILIKE)
             if search_text:
-                # Разбиваем строку поиска на отдельные слова
                 search_words = search_text.split()
-                
                 conditions = []
-                # Для каждого слова создаем условия поиска по всем полям
                 for word in search_words:
-                    if word.strip():  # Проверяем, что слово не пустое
+                    if word.strip():
                         word_conditions = [
                             "item_article ILIKE %s",
                             "item_name ILIKE %s", 
@@ -196,30 +182,26 @@ class DatabaseConnection:
                             "item_information ILIKE %s"
                         ]
                         conditions.append(f"({' OR '.join(word_conditions)})")
-                        # Добавляем слово с % для каждого поля (7 полей)
                         params.extend([f"%{word}%"] * 7)
                 
                 if conditions:
-                    # Объединяем условия через AND (все слова должны встречаться где-то в записи)
                     query += f" AND ({' AND '.join(conditions)})"
 
-            # Фильтр по поставщику
             if company_filter and company_filter != "Все поставщики":
                 query += " AND item_deliveryman = %s"
                 params.append(company_filter)
 
-            # Сортировка
             if sort_by_count:
                 if sort_ascending:
-                    query += " ORDER BY item_count ASC"  # по возрастанию
+                    query += " ORDER BY item_count ASC"
                 else:
-                    query += " ORDER BY item_count DESC"  # по убыванию
+                    query += " ORDER BY item_count DESC"
             else:
-                query += " ORDER BY item_name"  # по умолчанию — по названию
+                query += " ORDER BY item_name"
 
-            cursor = self.connection.cursor()
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
 
             result = []
             for answer in rows:
@@ -238,7 +220,6 @@ class DatabaseConnection:
                     "information": answer[10],
                     "picture": picture,
                 })
-            cursor.close()
             logging.info(f"Поиск завершен, найдено товаров: {len(result)}")
             return result
         except Exception as e:
@@ -252,17 +233,15 @@ class DatabaseConnection:
         """
         try:
             logging.info("Запрос всех поставщиков из БД")
-            cursor = self.connection.cursor()
-            cursor.execute("""
-            SELECT DISTINCT item_deliveryman
-            FROM Items
-            ORDER BY item_deliveryman
-            """)
-
             result = ["Все поставщики"]
-            for answer in cursor.fetchall():
-                result.append(answer[0])
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                SELECT DISTINCT item_deliveryman
+                FROM Items
+                ORDER BY item_deliveryman
+                """)
+                for answer in cursor.fetchall():
+                    result.append(answer[0])
             logging.info(f"Получено поставщиков: {len(result)-1}")
             return result
         except Exception as e:
@@ -282,30 +261,28 @@ class DatabaseConnection:
             from Items
             where item_id = %s
             """
-            cursor = self.connection.cursor()
-            cursor.execute(query, (item_id,))
             result = dict()
-            for answer in cursor.fetchall():
-                result = {
-                    "id": answer[0],
-                    "article": answer[1],
-                    "name": answer[2],
-                    "edinica": answer[3],
-                    "cost": float(answer[4]) if answer[4] else 0.0,
-                    "deliveryman": answer[5],
-                    "creator": answer[6],
-                    "category": answer[7],
-                    "sale": answer[8],
-                    "count": answer[9],
-                    "information": answer[10],
-                    "picture": answer[11] or ""
-                }
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (item_id,))
+                for answer in cursor.fetchall():
+                    result = {
+                        "id": answer[0],
+                        "article": answer[1],
+                        "name": answer[2],
+                        "edinica": answer[3],
+                        "cost": float(answer[4]) if answer[4] else 0.0,
+                        "deliveryman": answer[5],
+                        "creator": answer[6],
+                        "category": answer[7],
+                        "sale": answer[8],
+                        "count": answer[9],
+                        "information": answer[10],
+                        "picture": answer[11] or ""
+                    }
             logging.info(f"Данные товара получены: {result.get('name', 'Неизвестно')}")
             return result
         except Exception as e:
             logging.error(f"Ошибка получения данных товара: {e}")
-            # В случае ошибки сбрасываем транзакцию
             self.connection.rollback()
             return {}
 
@@ -319,8 +296,6 @@ class DatabaseConnection:
         try:
             item_id = Storage.get_item_id()
             logging.info(f"Обновление товара ID: {item_id}, фото: {picture_name}")
-            
-            # Восстанавливаем соединение
             self.connection.rollback()
             
             query = """
@@ -339,45 +314,39 @@ class DatabaseConnection:
                 WHERE item_id = %s
             """
             
-            # Проверяем количество параметров
             if len(user_input_data) != 10:
                 logging.error(f"ОШИБКА: ожидалось 10 параметров, получено {len(user_input_data)}")
                 return False
             
-            # Подготавливаем параметры
             params = [
-                picture_name,  # item_picture
-                user_input_data[0],  # item_article
-                user_input_data[1],  # item_name
-                user_input_data[2],  # item_edinica (unit)
-                float(user_input_data[3]) if user_input_data[3] else 0.0,  # item_cost
-                user_input_data[4],  # item_deliveryman
-                user_input_data[5],  # item_creator
-                user_input_data[6],  # item_category
-                int(user_input_data[7]) if user_input_data[7] else 0,  # item_sale
-                int(user_input_data[8]) if user_input_data[8] else 0,  # item_count
-                user_input_data[9],  # item_information
-                item_id  # WHERE item_id
+                picture_name,
+                user_input_data[0],
+                user_input_data[1],
+                user_input_data[2],
+                float(user_input_data[3]) if user_input_data[3] else 0.0,
+                user_input_data[4],
+                user_input_data[5],
+                user_input_data[6],
+                int(user_input_data[7]) if user_input_data[7] else 0,
+                int(user_input_data[8]) if user_input_data[8] else 0,
+                user_input_data[9],
+                item_id
             ]
             
-            cursor = self.connection.cursor()
-            cursor.execute(query, tuple(params))
-            self.connection.commit()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, tuple(params))
+                self.connection.commit()
             
             logging.info(f"Товар успешно обновлен в БД: ID={item_id}, фото={picture_name}")
             return True
             
         except Exception as e:
             logging.error(f"Ошибка обновления товара: {e}")
-            import traceback
             traceback.print_exc()
             self.connection.rollback()
             return False
 
-    def create_new_card(self,
-                        user_input: list,
-                        picture_name: str):
+    def create_new_card(self, user_input: list, picture_name: str):
         """
         Метод создания нового товара
         :param user_input: Ввод пользователя
@@ -401,10 +370,9 @@ class DatabaseConnection:
             item_picture)
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            cursor = self.connection.cursor()
-            cursor.execute(query, tuple(map(str, user_input)) + (picture_name,))
-            self.connection.commit()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, tuple(map(str, user_input)) + (picture_name,))
+                self.connection.commit()
             logging.info("Товар успешно создан в БД")
             return True
         except Exception as e:
@@ -412,8 +380,7 @@ class DatabaseConnection:
             self.connection.rollback()
             return False
 
-    def delete_item(self,
-                    item_article: str):
+    def delete_item(self, item_article: str):
         """
         Метод для удаления товара из таблицы
         :return: bool
@@ -421,27 +388,23 @@ class DatabaseConnection:
         try:
             item_id = Storage.get_item_id()
             logging.info(f"Запрос на удаление товара: ID={item_id}, артикул={item_article}")
-            cursor = self.connection.cursor()
-            # Проверка, что товара нет в заказах
-            cursor.execute("""
-            SELECT COUNT(*) FROM OrderItems WHERE product_article = %s
-            """, (item_article,))
             
-            count = cursor.fetchone()[0]
-            if count != 0:
-                cursor.close()
-                logging.warning(f"Товар {item_article} используется в {count} заказах, удаление отменено")
-                return False
-            
-            # Если в ответе от бд есть хоть 1 элемент - отклонение запроса
-            # Запуск удаления элемента
-            cursor.execute("""
-                    delete 
-                    FROM Items
-                    WHERE item_id = %s
-                    """, (item_id,))
-            self.connection.commit()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                SELECT COUNT(*) FROM OrderItems WHERE product_article = %s
+                """, (item_article,))
+                
+                count = cursor.fetchone()[0]
+                if count != 0:
+                    logging.warning(f"Товар {item_article} используется в {count} заказах, удаление отменено")
+                    return False
+                
+                cursor.execute("""
+                        delete 
+                        FROM Items
+                        WHERE item_id = %s
+                        """, (item_id,))
+                self.connection.commit()
             logging.info(f"Товар успешно удален из БД: ID={item_id}")
             return True
         except Exception as e:
@@ -449,8 +412,7 @@ class DatabaseConnection:
             self.connection.rollback()
             return False
 
-    def take_all_text_data_for_combo_box(self,
-                                         type_of_data: str):
+    def take_all_text_data_for_combo_box(self, type_of_data: str):
         """
         Метод для получения списка строк для Выпадающего списка
         :param type_of_data: Наименование колонки для получения данных
@@ -458,8 +420,6 @@ class DatabaseConnection:
         """
         try:
             logging.info(f"Получение данных для комбобокса: {type_of_data}")
-            # По умолчанию - выбираем все колонки
-            # Но 100% будет 1 из вариантов Условного Опператора
             column_name = "*"
             if type_of_data == "category":
                 column_name = "item_category"
@@ -475,15 +435,12 @@ class DatabaseConnection:
             order by {column_name}
             """
 
-            cursor = self.connection.cursor()
-            cursor.execute(query)
-
             result = []
+            with self.connection.cursor() as cursor:
+                cursor.execute(query)
+                for answer in cursor.fetchall():
+                    result.append(str(answer[0]))
 
-            for answer in cursor.fetchall():
-                result.append(str(answer[0]))
-
-            cursor.close()
             logging.info(f"Получено значений для комбобокса {type_of_data}: {len(result)}")
             return result
         except Exception as e:
@@ -494,8 +451,6 @@ class DatabaseConnection:
         """Получает все заказы для отображения в списке"""
         try:
             logging.info("Запрос всех заказов из БД")
-            cursor = self.connection.cursor()
-            
             query = """
             SELECT 
                 order_id as id,
@@ -507,10 +462,9 @@ class DatabaseConnection:
             FROM orders
             ORDER BY order_id
             """
-            
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
             
             result = []
             for row in rows:
@@ -548,11 +502,10 @@ class DatabaseConnection:
         """Получает адрес ПВЗ по ID"""
         try:
             logging.info(f"Запрос адреса ПВЗ ID: {pvz_id}")
-            cursor = self.connection.cursor()
             query = "SELECT pvz_address FROM pvz WHERE pvz_id = %s"
-            cursor.execute(query, (pvz_id,))
-            result = cursor.fetchone()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (pvz_id,))
+                result = cursor.fetchone()
             
             if result:
                 logging.info(f"Адрес ПВЗ найден: {result[0]}")
@@ -568,13 +521,11 @@ class DatabaseConnection:
         """Получает все адреса ПВЗ для выпадающего списка"""
         try:
             logging.info("Запрос всех адресов ПВЗ")
-            cursor = self.connection.cursor()
             query = "SELECT pvz_id, pvz_address FROM pvz ORDER BY pvz_id"
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
             
-            # Формируем строки в формате "ID | Адрес"
             result = [f"{row[0]} | {row[1]}" for row in rows]
             logging.info(f"Получено адресов ПВЗ: {len(result)}")
             return result
@@ -589,15 +540,14 @@ class DatabaseConnection:
         """
         try:
             logging.info("Запрос всех статусов заказов")
-            cursor = self.connection.cursor()
-            cursor.execute(
-                """
-                select DISTINCT order_status
-                from Orders;
-                """
-            )
-            result = [str(i[0]) for i in cursor.fetchall()]
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select DISTINCT order_status
+                    from Orders;
+                    """
+                )
+                result = [str(i[0]) for i in cursor.fetchall()]
             logging.info(f"Получено статусов заказов: {len(result)}")
             return result
         except Exception as e:
@@ -608,8 +558,6 @@ class DatabaseConnection:
         """Получает товары заказа"""
         try:
             logging.info(f"Запрос товаров заказа ID: {order_id}")
-            cursor = self.connection.cursor()
-            
             query = """
             SELECT 
                 oi.product_article as article,
@@ -619,10 +567,9 @@ class DatabaseConnection:
             LEFT JOIN items i ON oi.product_article = i.item_article
             WHERE oi.order_id = %s
             """
-            
-            cursor.execute(query, (order_id,))
-            rows = cursor.fetchall()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (order_id,))
+                rows = cursor.fetchall()
             
             result = []
             for row in rows:
@@ -643,8 +590,6 @@ class DatabaseConnection:
         """Получает товары заказа с ценами"""
         try:
             logging.info(f"Запрос товаров заказа с ценами ID: {order_id}")
-            cursor = self.connection.cursor()
-            
             query = """
             SELECT 
                 oi.product_article as article,
@@ -655,10 +600,9 @@ class DatabaseConnection:
             LEFT JOIN items i ON oi.product_article = i.item_article
             WHERE oi.order_id = %s
             """
-            
-            cursor.execute(query, (order_id,))
-            rows = cursor.fetchall()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (order_id,))
+                rows = cursor.fetchall()
             
             result = []
             for row in rows:
@@ -680,10 +624,9 @@ class DatabaseConnection:
         """Проверяет, используется ли товар в заказах"""
         try:
             logging.info(f"Проверка использования товара в заказах: {product_article}")
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT COUNT(*) FROM OrderItems WHERE product_article = %s", (product_article,))
-            count = cursor.fetchone()[0]
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) FROM OrderItems WHERE product_article = %s", (product_article,))
+                count = cursor.fetchone()[0]
             logging.info(f"Товар {product_article} используется в {count} заказах")
             return count > 0
         except Exception as e:
@@ -694,59 +637,52 @@ class DatabaseConnection:
         """Создает новый заказ в БД"""
         try:
             logging.info(f"Создание нового заказа: ПВЗ={order_data['pvz_id']}, статус={order_data['status']}")
-            cursor = self.connection.cursor()
-            
-            # Генерируем артикул заказа на основе ID
-            cursor.execute("SELECT COALESCE(MAX(order_id), 0) + 1 FROM Orders")
-            next_order_id = cursor.fetchone()[0]
-            order_article = f"ORD{next_order_id:06d}"
-            
-            # Вставляем заказ
-            order_query = """
-            INSERT INTO Orders (order_create_date, order_delivery_date, order_pvz_id_fk,
-                            order_client_name, order_code, order_status)
-            VALUES (CURRENT_DATE, %s, %s, %s, %s, %s)
-            RETURNING order_id
-            """
-            
-            cursor.execute(order_query, (
-                order_data['delivery_date'],
-                order_data['pvz_id'],
-                order_data['client_name'], 
-                order_data['code'],
-                order_data['status']
-            ))
-            
-            order_id = cursor.fetchone()[0]
-            logging.info(f"Создан заказ с ID: {order_id}")
-            
-            # Вставляем товары заказа
-            items_query = """
-            INSERT INTO OrderItems (order_id, product_article, quantity)
-            VALUES (%s, %s, %s)
-            """
-            
-            for item in order_data['items']:
-                cursor.execute(items_query, (order_id, item['article'], item['quantity']))
-                logging.info(f"Добавлен товар {item['article']} x{item['quantity']}")
+            with self.connection.cursor() as cursor:
+                cursor.execute("SELECT COALESCE(MAX(order_id), 0) + 1 FROM Orders")
+                next_order_id = cursor.fetchone()[0]
+                order_article = f"ORD{next_order_id:06d}"
                 
-                # Уменьшаем количество товара на складе
+                order_query = """
+                INSERT INTO Orders (order_create_date, order_delivery_date, order_pvz_id_fk,
+                                    order_client_name, order_code, order_status)
+                VALUES (CURRENT_DATE, %s, %s, %s, %s, %s)
+                RETURNING order_id
+                """
+                
+                cursor.execute(order_query, (
+                    order_data['delivery_date'],
+                    order_data['pvz_id'],
+                    order_data['client_name'], 
+                    order_data['code'],
+                    order_data['status']
+                ))
+                
+                order_id = cursor.fetchone()[0]
+                logging.info(f"Создан заказ с ID: {order_id}")
+                
+                items_query = """
+                INSERT INTO OrderItems (order_id, product_article, quantity)
+                VALUES (%s, %s, %s)
+                """
+                
                 update_query = """
                 UPDATE Items 
                 SET item_count = item_count - %s 
                 WHERE item_article = %s
                 """
-                cursor.execute(update_query, (item['quantity'], item['article']))
-            
-            self.connection.commit()
-            cursor.close()
+                
+                for item in order_data['items']:
+                    cursor.execute(items_query, (order_id, item['article'], item['quantity']))
+                    logging.info(f"Добавлен товар {item['article']} x{item['quantity']}")
+                    cursor.execute(update_query, (item['quantity'], item['article']))
+                
+                self.connection.commit()
             
             logging.info(f"Заказ успешно создан! ID: {order_id}, товаров: {len(order_data['items'])}")
             return True
             
         except Exception as e:
             logging.error(f"Ошибка создания заказа: {e}")
-            import traceback
             traceback.print_exc()
             self.connection.rollback()
             return False
@@ -755,8 +691,6 @@ class DatabaseConnection:
         """Обновляет данные заказа"""
         try:
             logging.info(f"Обновление заказа ID: {order_data['id']}")
-            cursor = self.connection.cursor()
-            
             query = """
             UPDATE orders 
             SET 
@@ -765,16 +699,14 @@ class DatabaseConnection:
                 order_delivery_date = %s
             WHERE order_id = %s
             """
-            
-            cursor.execute(query, (
-                order_data['pvz_id'],
-                order_data['status'],
-                order_data['delivery_date'],
-                order_data['id']
-            ))
-            
-            self.connection.commit()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (
+                    order_data['pvz_id'],
+                    order_data['status'],
+                    order_data['delivery_date'],
+                    order_data['id']
+                ))
+                self.connection.commit()
             
             logging.info(f"Заказ {order_data['id']} успешно обновлен")
             return True
@@ -788,29 +720,25 @@ class DatabaseConnection:
         """Удаляет заказ"""
         try:
             logging.info(f"Удаление заказа ID: {order_id}")
-            cursor = self.connection.cursor()
-            
-            # Сначала возвращаем товары на склад
-            cursor.execute("""
-            SELECT product_article, quantity 
-            FROM OrderItems 
-            WHERE order_id = %s
-            """, (order_id,))
-            
-            items = cursor.fetchall()
-            logging.info(f"Товаров для возврата на склад: {len(items)}")
-            for article, quantity in items:
+            with self.connection.cursor() as cursor:
                 cursor.execute("""
-                UPDATE Items 
-                SET item_count = item_count + %s 
-                WHERE item_article = %s
-                """, (quantity, article))
-            
-            # Удаляем заказ (каскадно удалятся OrderItems)
-            cursor.execute("DELETE FROM Orders WHERE order_id = %s", (order_id,))
-            
-            self.connection.commit()
-            cursor.close()
+                SELECT product_article, quantity 
+                FROM OrderItems 
+                WHERE order_id = %s
+                """, (order_id,))
+                
+                items = cursor.fetchall()
+                logging.info(f"Товаров для возврата на склад: {len(items)}")
+                for article, quantity in items:
+                    cursor.execute("""
+                    UPDATE Items 
+                    SET item_count = item_count + %s 
+                    WHERE item_article = %s
+                    """, (quantity, article))
+                
+                cursor.execute("DELETE FROM Orders WHERE order_id = %s", (order_id,))
+                self.connection.commit()
+                
             logging.info(f"Заказ {order_id} успешно удален")
             return True
         except Exception as e:
@@ -822,9 +750,6 @@ class DatabaseConnection:
         """Получает данные конкретного заказа по ID"""
         try:
             logging.info(f"Запрос данных заказа ID: {order_id}")
-
-            cursor = self.connection.cursor()
-
             query = """
             SELECT 
                 order_id as id,
@@ -837,10 +762,9 @@ class DatabaseConnection:
             FROM orders
             WHERE order_id = %s
             """
-            
-            cursor.execute(query, (order_id,))
-            result = cursor.fetchone()
-            cursor.close()
+            with self.connection.cursor() as cursor:
+                cursor.execute(query, (order_id,))
+                result = cursor.fetchone()
             
             if result:
                 logging.info(f"Найден заказ: ID={result[0]}, статус={result[4]}")
@@ -859,6 +783,5 @@ class DatabaseConnection:
                 
         except Exception as e:
             logging.error(f"Ошибка получения заказа по ID: {e}")
-            import traceback
             traceback.print_exc()
             return None

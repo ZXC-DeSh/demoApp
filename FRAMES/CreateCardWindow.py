@@ -120,21 +120,6 @@ class CreateCardFrame(QFrame):
         save_btn.clicked.connect(self.save_new_product)
         self.frame_layout.addWidget(save_btn)
 
-        test_frame = QWidget()
-        test_layout = QHBoxLayout(test_frame)
-        test_layout.setContentsMargins(0, 0, 0, 0)
-
-        positive_test_btn = QPushButton("Положительный тест")
-        positive_test_btn.setObjectName("test_button")
-        positive_test_btn.clicked.connect(self.run_positive_test)
-        test_layout.addWidget(positive_test_btn)
-
-        negative_test_btn = QPushButton("Отрицательный тест")
-        negative_test_btn.setObjectName("test_button")
-        negative_test_btn.clicked.connect(self.run_negative_test)
-        test_layout.addWidget(negative_test_btn)
-
-        self.frame_layout.addWidget(test_frame)
 
     def create_input_fields(self):
         """Создает поля для ввода данных в порядке как в таблице БД"""

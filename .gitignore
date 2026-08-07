@@ -2,7 +2,10 @@ __pycache__/
 DATABASE/__pycache__/
 FRAMES/__pycache__/
 TASK/
+!ICONS/
 ICONS/*
 !ICONS/.gitkeep
+!temp/
+temp/*
 !temp/.gitkeep
 Demo-main.zip

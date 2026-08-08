@@ -2,7 +2,7 @@ import logging
 import traceback
 import psycopg
 from psycopg.rows import dict_row
-from DATABASE.config import *
+from DATABASE.config import database_name, host_address, user_name, user_password
 from StaticStorage import Storage
 
 
@@ -24,6 +24,8 @@ class DatabaseConnection:
             self._rollback_safe()
 
     def _rollback_safe(self):
+        if self.connection is None:
+            return
         try:
             self.connection.rollback()
         except Exception as e:
@@ -39,17 +41,15 @@ class DatabaseConnection:
             return None
 
     def ensure_connection(self):
-        try:
-            with self.connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            logging.info("Соединение с БД активно")
-        except Exception as e:
-            logging.warning(f"Восстановление соединения с БД: {e}")
-            if self.connection:
-                self.connection.rollback()
+        if self.connection is not None and not self.connection.closed:
+            return True
+        self.connection = self.connect_to_database()
+        return self.connection is not None
 
     def _fetch(self, query: str, params: tuple = (), fetch_one: bool = False, as_dict: bool = False):
         """Универсальный метод чтения данных из БД"""
+        if not self.ensure_connection():
+            return None if fetch_one else []
         try:
             row_factory = dict_row if as_dict else None
             with self.connection.cursor(row_factory=row_factory) as cursor:
@@ -57,11 +57,13 @@ class DatabaseConnection:
                 return cursor.fetchone() if fetch_one else cursor.fetchall()
         except Exception as e:
             logging.error(f"Ошибка выполнения запроса чтения: {e}")
-            self.connection.rollback()
+            self._rollback_safe()
             return None if fetch_one else []
 
     def _execute(self, query: str, params: tuple = ()) -> bool:
         """Универсальный метод записи/обновления/удаления"""
+        if not self.ensure_connection():
+            return False
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(query, params)
@@ -69,7 +71,7 @@ class DatabaseConnection:
             return True
         except Exception as e:
             logging.error(f"Ошибка выполнения записи: {e}")
-            self.connection.rollback()
+            self._rollback_safe()
             return False
 
     # === АВТОРИЗАЦИЯ И ПОЛЬЗОВАТЕЛИ ===
@@ -154,34 +156,33 @@ class DatabaseConnection:
             res["cost"] = float(res["cost"])
         return res
 
-    def update_card_picture(self, picture_name: str, user_input_data: list):
+    def update_card_picture(self, picture_name: str, product: dict):
         item_id = Storage.get_item_id()
-        if len(user_input_data) != 10:
-            logging.error(f"ОШИБКА: ожидалось 10 параметров, получено {len(user_input_data)}")
-            return False
-
         query = """
             UPDATE Items SET item_picture=%s, item_article=%s, item_name=%s, item_edinica=%s,
             item_cost=%s, item_deliveryman=%s, item_creator=%s, item_category=%s,
             item_sale=%s, item_count=%s, item_information=%s WHERE item_id=%s
         """
-        params = [
-            picture_name, user_input_data[0], user_input_data[1], user_input_data[2],
-            float(user_input_data[3]) if user_input_data[3] else 0.0,
-            user_input_data[4], user_input_data[5], user_input_data[6],
-            int(user_input_data[7]) if user_input_data[7] else 0,
-            int(user_input_data[8]) if user_input_data[8] else 0,
-            user_input_data[9], item_id
-        ]
+        params = (
+            picture_name, product["article"], product["name"], product["unit"],
+            product["cost"], product["deliveryman"], product["creator"],
+            product["category"], product["sale"], product["count"],
+            product["information"], item_id,
+        )
         return self._execute(query, tuple(params))
 
-    def create_new_card(self, user_input: list, picture_name: str):
+    def create_new_card(self, product: dict, picture_name: str):
         query = """
             INSERT INTO Items (item_article, item_name, item_edinica, item_cost, item_deliveryman,
                                item_creator, item_category, item_sale, item_count, item_information, item_picture)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-        return self._execute(query, tuple(map(str, user_input)) + (picture_name,))
+        params = (
+            product["article"], product["name"], product["unit"], product["cost"],
+            product["deliveryman"], product["creator"], product["category"],
+            product["sale"], product["count"], product["information"], picture_name,
+        )
+        return self._execute(query, params)
 
     def delete_item(self, item_article: str):
         item_id = Storage.get_item_id()
@@ -198,14 +199,29 @@ class DatabaseConnection:
         query = f"SELECT DISTINCT {col} FROM Items WHERE {col} IS NOT NULL AND {col} != '' ORDER BY {col}"
         return [str(r[0]) for r in self._fetch(query)]
 
+    def article_exists(self, article: str, exclude_id=None) -> bool:
+        query = "SELECT COUNT(*) FROM Items WHERE item_article = %s"
+        params = [article]
+        if exclude_id is not None:
+            query += " AND item_id != %s"
+            params.append(exclude_id)
+        row = self._fetch(query, tuple(params), fetch_one=True)
+        return bool(row and row[0])
+
     # === ЗАКАЗЫ И ПВЗ ===
 
     def take_all_orders_rows(self):
         query = """
-            SELECT order_id as id, order_status as status, order_pvz_id_fk as pvz,
-                   order_create_date as create_date, order_delivery_date as delivery_date,
-                   order_client_name as client_name
-            FROM orders ORDER BY order_id
+            SELECT o.order_id as id, o.order_status as status, o.order_pvz_id_fk as pvz,
+                   o.order_create_date as create_date, o.order_delivery_date as delivery_date,
+                   o.order_client_name as client_name, p.pvz_address,
+                   COALESCE((
+                       SELECT string_agg(oi.product_article || ', ' || oi.quantity::text, ', ' ORDER BY oi.order_item_id)
+                       FROM OrderItems oi WHERE oi.order_id = o.order_id
+                   ), 'ORD' || o.order_id::text) as article
+            FROM Orders o
+            JOIN PVZ p ON p.pvz_id = o.order_pvz_id_fk
+            ORDER BY o.order_id
         """
         return self._fetch(query, as_dict=True)
 
@@ -224,6 +240,10 @@ class DatabaseConnection:
     def take_all_statuses(self):
         rows = self._fetch("SELECT DISTINCT order_status FROM Orders")
         return [str(r[0]) for r in rows] or ["Новый", "Завершен"]
+
+    def get_next_order_code(self) -> int:
+        row = self._fetch("SELECT COALESCE(MAX(order_code), 900) + 1 FROM Orders", fetch_one=True)
+        return int(row[0]) if row else 901
 
     def get_order_items_with_prices(self, order_id):
         query = """
@@ -247,23 +267,29 @@ class DatabaseConnection:
         return res[0] > 0 if res else False
 
     def create_new_order(self, order_data):
+        if not self.ensure_connection():
+            return False
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute("SELECT COALESCE(MAX(order_id), 0) + 1 FROM Orders")
-                next_order_id = cursor.fetchone()[0]
-
                 order_query = """
                     INSERT INTO Orders (order_create_date, order_delivery_date, order_pvz_id_fk,
                                         order_client_name, order_code, order_status)
-                    VALUES (CURRENT_DATE, %s, %s, %s, %s, %s) RETURNING order_id
+                    VALUES (%s, %s, %s, %s, %s, %s) RETURNING order_id
                 """
                 cursor.execute(order_query, (
-                    order_data['delivery_date'], order_data['pvz_id'],
+                    order_data['create_date'], order_data['delivery_date'], order_data['pvz_id'],
                     order_data['client_name'], order_data['code'], order_data['status']
                 ))
                 order_id = cursor.fetchone()[0]
 
                 for item in order_data['items']:
+                    cursor.execute(
+                        "SELECT item_count FROM Items WHERE item_article = %s FOR UPDATE",
+                        (item['article'],),
+                    )
+                    stock = cursor.fetchone()
+                    if not stock or stock[0] < item['quantity']:
+                        raise ValueError(f"Недостаточный остаток товара {item['article']}")
                     cursor.execute("INSERT INTO OrderItems (order_id, product_article, quantity) VALUES (%s, %s, %s)",
                                    (order_id, item['article'], item['quantity']))
                     cursor.execute("UPDATE Items SET item_count = item_count - %s WHERE item_article = %s",
@@ -274,7 +300,7 @@ class DatabaseConnection:
         except Exception as e:
             logging.error(f"Ошибка создания заказа: {e}")
             traceback.print_exc()
-            self.connection.rollback()
+            self._rollback_safe()
             return False
 
     def update_order_data(self, order_data):
@@ -282,6 +308,8 @@ class DatabaseConnection:
         return self._execute(query, (order_data['pvz_id'], order_data['status'], order_data['delivery_date'], order_data['id']))
 
     def delete_order(self, order_id):
+        if not self.ensure_connection():
+            return False
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute("SELECT product_article, quantity FROM OrderItems WHERE order_id = %s", (order_id,))
@@ -292,14 +320,22 @@ class DatabaseConnection:
                 return True
         except Exception as e:
             logging.error(f"Ошибка удаления заказа: {e}")
-            self.connection.rollback()
+            self._rollback_safe()
             return False
 
     def get_order_by_id(self, order_id):
         query = """
-            SELECT order_id as id, order_create_date as create_date, order_delivery_date as delivery_date,
-                   order_pvz_id_fk as pvz, order_status as status, order_client_name as client_name,
-                   order_code as code
-            FROM orders WHERE order_id = %s
+            SELECT o.order_id as id, o.order_create_date as create_date,
+                   o.order_delivery_date as delivery_date, o.order_pvz_id_fk as pvz,
+                   o.order_status as status, o.order_client_name as client_name,
+                   o.order_code as code, p.pvz_address,
+                   o.order_pvz_id_fk::text || ' | ' || p.pvz_address as pvz_display,
+                   COALESCE((
+                       SELECT string_agg(oi.product_article || ', ' || oi.quantity::text, ', ' ORDER BY oi.order_item_id)
+                       FROM OrderItems oi WHERE oi.order_id = o.order_id
+                   ), 'ORD' || o.order_id::text) as article
+            FROM Orders o
+            JOIN PVZ p ON p.pvz_id = o.order_pvz_id_fk
+            WHERE o.order_id = %s
         """
         return self._fetch(query, (order_id,), fetch_one=True, as_dict=True)

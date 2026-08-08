@@ -1,79 +1,119 @@
 styles_sheet = """
-/* Основные цвета из руководства по стилю */
+/* Базовые настройки */
 QWidget {
-    background-color: #FFFFFF;  /* Основной фон - белый */
+    background-color: #FFFFFF;
     font-family: "Times New Roman";
     color: black;
 }
 
-#Title {
-    font-size: 60px;
-    font-weight: bold;
-    color: black;
+/* Общие свойства текста */
+#Title, #FIO, #cardText, #UpdateTextHint,
+#sale_text, #text_logo, #original_price,
+#discounted_price, #normal_price, #stock_count,
+#order_article, #order_text, #delivery_title, #delivery_date {
     background: none;
+}
+
+#cardText, #search_edit, #UpdateTextEdit,
+#UpdateTextHint, #stock_count, #order_article, #delivery_date {
+    font-size: 20px;
+}
+
+#original_price, #discounted_price, #normal_price,
+#order_text, #small_button {
+    font-size: 18px;
+}
+
+#Title, #text_logo, #discounted_price, #normal_price,
+#order_article, #delivery_title, #delivery_date {
+    font-weight: bold;
+}
+
+#Title, #sale_text {
     qproperty-alignment: AlignCenter;
 }
 
-#logInLabel {
-    font-size: 30px;
-    padding-left: 15px;
-    padding-bottom: 10px;
-    color: black;
-    background: none;
-}
-
-#LogInEdit {
-    font-size: 30px;
-    color: black;
-    padding: 10px;
-    background: white;
-    border: 1px solid #cccccc;
-}
-
-#button {
-    font-size: 40px;
-    background: #00FA9A;  /* Акцентный цвет */
-    color: black;
-    border: 1px solid black;
-    padding: 10px;
-}
-
-#button::hover {
-    font-size: 40px;
-    font-weight: bold;
-    background: #00FA9A;
-    color: black;
-    border: 2px solid black;
-    padding: 10px;
+#Title {
+    font-size: 60px;
 }
 
 #FIO {
     font-size: 30px;
     qproperty-alignment: AlignRight;
     padding-right: 10px;
-    color: black;
-    background: none;
 }
 
+#text_logo {
+    font-size: 28px;
+}
+
+#sale_text {
+    font-size: 22px;
+}
+
+#UpdateTextHint {
+    padding-left: 10px;
+}
+
+/* Поля ввода */
+#LogInEdit, #UpdateTextEdit {
+    background: white;
+    border: 1px solid #cccccc;
+}
+
+#LogInEdit {
+    font-size: 30px;
+    padding: 10px;
+}
+
+#UpdateTextEdit {
+    padding: 5px;
+}
+
+#search_edit {
+    padding: 10px;
+    border: 1px solid black;
+    background: white;
+}
+
+/* Кнопки */
+#button, #table_button, #small_button {
+    background: #00FA9A;
+    border: 1px solid black;
+}
+
+#button {
+    font-size: 40px;
+    padding: 10px;
+}
+
+#button:hover {
+    font-weight: bold;
+    border-width: 2px;
+}
+
+#table_button {
+    padding: 4px 8px;
+}
+
+#small_button {
+    padding: 6px 12px;
+}
+
+/* Шапка */
 #back_header_button {
     font-size: 30px;
-    color: black;
-    background: #7FFF00;  /* Дополнительный фон */
-    border: none;
-    padding: 20px;
-}
-
-#back_header_button::hover {
-    font-size: 30px;
-    color: black;
-    font-weight: bold;
     background: #7FFF00;
     border: none;
     padding: 20px;
 }
 
+#back_header_button:hover {
+    font-weight: bold;
+}
+
 #header_widget {
-    background: #7FFF00;  /* Дополнительный фон */
+    background: #7FFF00;
     border: 1px solid black;
 }
 
@@ -82,140 +122,71 @@ QWidget {
     border: none;
 }
 
-#sale_widget {
-    border: 1px solid black;
-    background: white;
-    color: black;
-}
-
-#cardText {
-    font-size: 20px;
-    color: black;  /* Черный текст для читаемости */
-    background: none;
-}
-
-#sale_count {
-    qproperty-alignment: AlignCenter;
-    font-size: 20px;
-    color: black;
-    background: none;
-}
-
-#search_edit {
-    font-size: 20px;
-    padding: 10px;
-    color: black;
-    border: 1px solid black;
-    background: white;
-}
-
-#search_button {
-    font-size: 20px;
-    border: none;
-    background: #00FA9A;  /* Акцентный цвет */
-    color: black;
-    padding: 10px;
-}
-
-#search_button::hover {
-    font-size: 20px;
-    border: 1px solid black;
-    background: #00FA9A;
-    color: black;
-    padding: 10px;
-}
-
+/* Карточки товаров */
 #item_card {
     border: 3px solid black;
-    background: white;  /* Белый фон карточек по умолчанию */
+    background: white;
 }
 
-#update_button {
+#sale_widget, #update_button {
     border: 1px solid black;
     background: white;
-    color: black;
 }
 
-#UpdateTextEdit {
-    font-size: 20px;
-    color: black;
+#product_image_preview {
+    border: 1px solid gray;
+    background: white;
+}
+
+#item_card[state="high_discount"],
+#item_card[state="high_discount"] #update_button,
+#item_card[state="high_discount"] #product_information {
+    background-color: #2E8B57;
+}
+
+#item_card[state="out_of_stock"],
+#item_card[state="out_of_stock"] #update_button,
+#item_card[state="out_of_stock"] #product_information {
+    background-color: #87CEEB;
+}
+
+#item_card[state="high_discount"] #cardText,
+#item_card[state="high_discount"] #stock_count {
+    color: white;
+}
+
+#product_picture {
     background: white;
     border: 1px solid #cccccc;
-    padding: 5px;
 }
 
-#UpdateTextHint {
-    font-size: 20px;
-    padding-left: 10px;
-    color: black;
-    background: none;
+#original_price {
+    color: red;
+    text-decoration: line-through;
 }
 
-#order_status {
-    font-size: 15px;
-    qproperty-alignment: AlignCenter;
-    color: black;
-    background: none;
-}
-
-#order_status_widget {
-    border: 3px solid black;
+/* Карточки заказов */
+#delivery_box {
+    min-width: 150px;
+    max-width: 150px;
+    border: 2px solid black;
     background: white;
 }
 
-/* Специальные стили для подсветки товаров */
-.high-sale-item {
-    background-color: #2E8B57;  /* Для скидки >15% */
-    border: 3px solid black;
-}
-
-.high-sale-item #cardText {
-    color: white;  /* Белый текст на зеленом фоне */
-    background: none;
-}
-
-.out-of-stock-item {
-    background-color: #87CEEB;  /* Голубой для отсутствия товара */
-    border: 3px solid black;
-}
-
-.out-of-stock-item #cardText {
-    color: black;  /* Черный текст на голубом фоне */
-    background: none;
-}
-
-.normal-item {
-    background-color: white;  /* Обычный товар */
-    border: 3px solid black;
-}
-
-.normal-item #cardText {
-    color: black;
-    background: none;
-}
-
-/* Стили для цен */
-.discounted-price {
-    color: black;
-    font-weight: bold;
-    font-size: 18px;
-    background: none;
-}
-
-.original-price {
-    color: red;
-    text-decoration: line-through;
+#delivery_title {
     font-size: 16px;
-    background: none;
 }
 
-.normal-price {
-    color: black;
-    font-size: 18px;
-    background: none;
+#order_item_name, #order_item_details, #empty_text,
+QMessageBox QPushButton {
+    font-size: 14px;
 }
 
-/* Стили для выпадающих списков */
+#order_item_details, #empty_text {
+    color: gray;
+}
+
+/* Выпадающие списки */
 QComboBox {
     background-color: white;
     color: black;
@@ -224,13 +195,12 @@ QComboBox {
     font-size: 16px;
 }
 
-QComboBox::drop-down {
+QComboBox::drop-down, QComboBox::down-arrow {
     border: none;
 }
 
 QComboBox::down-arrow {
     image: none;
-    border: none;
 }
 
 QComboBox QAbstractItemView {
@@ -240,29 +210,7 @@ QComboBox QAbstractItemView {
     selection-background-color: #00FA9A;
 }
 
-/* Стили для чекбоксов */
-QCheckBox {
-    color: black;
-    background: none;
-    font-size: 16px;
-}
-
-QCheckBox::indicator {
-    width: 15px;
-    height: 15px;
-}
-
-QCheckBox::indicator:unchecked {
-    border: 1px solid #cccccc;
-    background: white;
-}
-
-QCheckBox::indicator:checked {
-    border: 1px solid #cccccc;
-    background: #00FA9A;
-}
-
-/* Стили для таблиц */
+/* Таблицы */
 QTableWidget {
     background-color: white;
     color: black;
@@ -289,7 +237,7 @@ QHeaderView::section {
     font-weight: bold;
 }
 
-/* Стили для сообщений */
+/* Информационные окна */
 QMessageBox {
     background-color: white;
     color: black;
@@ -305,21 +253,11 @@ QMessageBox QPushButton {
     color: black;
     border: 1px solid gray;
     padding: 8px 16px;
-    font-size: 14px;
     font-family: "Times New Roman";
     min-width: 70px;
 }
 
 QMessageBox QPushButton:hover {
-    background-color: white;
-    color: black;
-    border: 1px solid black;
-}
-
-#sale_text {
-    font-size: 22px;
-    color: black;
-    background: none;
-    qproperty-alignment: AlignCenter;
+    border-color: black;
 }
 """

@@ -1,514 +1,157 @@
-from PySide6.QtWidgets import (QFrame, QPushButton, QHBoxLayout, QLineEdit, QCheckBox,
-                               QComboBox, QWidget, QVBoxLayout, QLabel, QScrollArea,
-                               QRadioButton, QButtonGroup)  # Добавляем QRadioButton и QButtonGroup
-from PySide6.QtGui import QPixmap, QPalette  # Для фоток
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
+
 import Messages
-from FRAMES import (LogInWindow, UpdateCardWindow,
-                    CreateCardWindow, OrdersCardsWindow)
+from FRAMES import CreateCardWindow, LogInWindow, OrdersCardsWindow, UpdateCardWindow
+from FRAMES.cards import ProductCard
+from FRAMES.components import create_header, create_title
 from StaticStorage import Storage
-import os
 
 
 class HomeFrame(QFrame):
     def __init__(self, controller):
-        """
-        Конструктор класса
-        :param controller: "self" из класса MainApplicationClass (который главное окно)
-        """
-
         super().__init__()
         self.controller = controller
         self.database = controller.db
-
-        # Таймер для поиска
-        self.search_timer = QTimer()
-        self.search_timer.setSingleShot(True)  # Срабатывает один раз
-        self.search_timer.timeout.connect(self.perform_search_and_filter)
-
-        # Виджеты для поиска и фильтрации
         self.search_edit = None
         self.company_combo = None
-        self.sort_asc_radio = None  # Сортировка по возрастанию
-        self.sort_desc_radio = None  # Сортировка по убыванию
-        self.sort_button_group = None  # Группа кнопок сортировки
+        self.sort_asc_radio = None
+        self.sort_desc_radio = None
 
-        # Создание разметки окна, в которую будет добавляться весь интерфейс
+        self.search_timer = QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.timeout.connect(self.perform_search_and_filter)
+
         self.frame_layout = QVBoxLayout(self)
-        self.setup_ui()  # Запуск генерации интерфейса
+        self.setup_ui()
 
-    def on_any_change(self):
-        """Вызывается при любом изменении: поиск, фильтр, сортировка"""
-        self.search_timer.stop()
+    def setup_ui(self):
+        self.frame_layout.addWidget(create_header(self.database, self.go_back_to_log_in_window))
+        self.frame_layout.addWidget(create_title("Список товаров"))
+
+        actions = set(Storage.get_roles_action())
+        if "Поиск" in actions:
+            self.create_search_block()
+        if "Сортировка" in actions:
+            self.create_sort_block()
+        if "Фильтрация" in actions:
+            self.create_filter_block()
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.frame_layout.addWidget(self.scroll_area)
+        self.update_items_display(self.database.get_all_items())
+
+        if Storage.get_user_role() == "Администратор":
+            add_button = QPushButton("Добавить товар", objectName="button")
+            add_button.clicked.connect(self.open_create_product)
+            self.frame_layout.addWidget(add_button)
+
+        if "Заказы" in actions:
+            orders_button = QPushButton("Заказы", objectName="button")
+            orders_button.clicked.connect(
+                lambda: self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)
+            )
+            self.frame_layout.addWidget(orders_button)
+
+    def create_search_block(self):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.addWidget(QLabel("Поиск:", objectName="UpdateTextHint"))
+        self.search_edit = QLineEdit(objectName="search_edit")
+        self.search_edit.textChanged.connect(self.on_any_change)
+        layout.addWidget(self.search_edit)
+        self.frame_layout.addWidget(container)
+
+    def create_sort_block(self):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.addWidget(QLabel("Сортировать по количеству на складе:", objectName="UpdateTextHint"))
+
+        self.sort_asc_radio = QRadioButton("↑ Возрастание")
+        self.sort_desc_radio = QRadioButton("↓ Убывание")
+        self.sort_group = QButtonGroup(self)
+        self.sort_group.addButton(self.sort_asc_radio)
+        self.sort_group.addButton(self.sort_desc_radio)
+        self.sort_asc_radio.toggled.connect(self.on_any_change)
+        self.sort_desc_radio.toggled.connect(self.on_any_change)
+        layout.addWidget(self.sort_asc_radio)
+        layout.addWidget(self.sort_desc_radio)
+        layout.addStretch()
+        self.frame_layout.addWidget(container)
+
+    def create_filter_block(self):
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.addWidget(QLabel("Поставщик:", objectName="UpdateTextHint"))
+        self.company_combo = QComboBox(objectName="company_filter")
+        self.company_combo.addItems(self.database.take_all_deliveryman())
+        self.company_combo.currentIndexChanged.connect(self.on_any_change)
+        layout.addWidget(self.company_combo)
+        layout.addStretch()
+        self.frame_layout.addWidget(container)
+
+    def on_any_change(self, *_):
         self.search_timer.start(300)
 
     def perform_search_and_filter(self):
-        """
-        После сброса таймера идет перезапись всей Scroll Area
-        :return: none
-        """
-        # Сбор всех данных для корректной перезаписи
         search_text = self.search_edit.text().strip() if self.search_edit else ""
         company = self.company_combo.currentText() if self.company_combo else ""
-        
-        # Получаем параметры сортировки
-        sort_by_count = False
-        sort_ascending = True  # По умолчанию сортировка по возрастанию
-        
-        if self.sort_button_group:
-            if self.sort_desc_radio and self.sort_desc_radio.isChecked():
-                sort_by_count = True
-                sort_ascending = False
-            elif self.sort_asc_radio and self.sort_asc_radio.isChecked():
-                sort_by_count = True
-                sort_ascending = True
-        
-        # Выполняем запрос в основном потоке
+        sort_by_count = bool(
+            (self.sort_asc_radio and self.sort_asc_radio.isChecked())
+            or (self.sort_desc_radio and self.sort_desc_radio.isChecked())
+        )
+        sort_ascending = not (self.sort_desc_radio and self.sort_desc_radio.isChecked())
         try:
-            # Получение списка с учетом всех вводных
             items = self.database.search_and_filter_items(
                 search_text=search_text,
                 company_filter=company,
                 sort_by_count=sort_by_count,
-                sort_ascending=sort_ascending  # Передаем направление сортировки
+                sort_ascending=sort_ascending,
             )
-            # Отправка команды на перезапись
             self.update_items_display(items)
-        except Exception as e:
-            print(f"Ошибка при поиске: {e}")
-            self.update_items_display([])
+        except Exception as error:
+            Messages.show_error(f"Не удалось обновить список товаров: {error}")
 
-    def setup_ui(self):
-        """ Генерация интерфейса """
-        # Шапка с кнопкой назад и ФИО
-        header_widget = QWidget()
-
-        header_widget.setObjectName("header_widget")
-        header_widget_hbox = QHBoxLayout(header_widget)
-
-        # Добавление кнопки "Назад"
-        back_header_btn = QPushButton("< Назад")
-        back_header_btn.setFixedWidth(150)
-        back_header_btn.clicked.connect(self.go_back_to_log_in_window)
-        back_header_btn.setObjectName("back_header_button")
-        header_widget_hbox.addWidget(back_header_btn)
-        header_widget_hbox.addStretch()
-
-        # Логотип по центру
-        logo_label = QLabel()
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Загружаем логотип
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_file_dir)
-        logo_path = os.path.join(project_root, "ICONS", "logo.png")
-        
-        if os.path.exists(logo_path):
-            logo_pixmap = QPixmap(logo_path)
-            # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_label.setPixmap(logo_pixmap)
+    def update_items_display(self, items):
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        if not items:
+            layout.addWidget(create_title("Товары не найдены"))
         else:
-            # Если файл не найден, показываем текстовый логотип
-            logo_label.setText("ОБУВЬ")
-            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
-        
-        header_widget_hbox.addWidget(logo_label)
-
-        # Растягивающий элемент
-        header_widget_hbox.addStretch()
-
-        # Добавление фио
-        # получение информации по пользователю (используя Login из статического класса)
-        user_data: dict = self.database.take_user_data()
-        fio_widget = QWidget()
-        fio_layout = QVBoxLayout(fio_widget)
-        print(user_data["user_name"].replace(" ", "\n"))
-        # Добавляем не просто ФИО, а делим его построчно
-        # Если входил гость - появится надпись Аккаунт Гостя
-        fio_layout.addWidget(QLabel(user_data["user_name"].replace(" ", "\n"), objectName="FIO"))
-        header_widget_hbox.addWidget(fio_widget)
-
-        self.frame_layout.addWidget(header_widget)
-
-        # Отображение списка товаров
-        title = QLabel("Список товаров")
-        title.setObjectName("Title")
-        self.frame_layout.addWidget(title)
-
-        """ 3й модуль
-        Суть - создать децствия для Менеджера и Администратора
-        Для того, чтобы каждый раз не проверять наличие действий у роли
-            в класса Storage был создан словарь 'roles_actions'
-        Который хранит зависимости Роль:[Действия]
-        
-        При запуске окна из Storage получается список с действиями,
-            которые требуется реализовать для выбранной роли
-        После, через цикл 'for' идет перебор списка и для каждого дейсвтия
-            работает свой паттерн сборки объектов
-        
-        Каждый объект интерфейса 3 модуля регулируется из БД
-            и то, что в нем будет выводиться - зависит от запросов к Таблицам
-        НЕ надо пытаться считать все данные и после - отсортировать их
-            средствами python. Вы потеряете больше времени на корректировку вывода
-        
-        Весь код 3 модуля будет переплетен с кодом 2го модуля, поэтому
-            я буду помечать его комментариями (по возможности)
-        """
-
-        # Получение списка действий для роли
-        roles_actions_list = Storage.get_roles_action()
-        # в roles_actions_list хранится список по типу ["Поиск", "Сортировка", "Фильтрация"]
-        # Храним ссылки на виджеты для доступа из других методов
-        self.search_edit = None
-        self.company_combo = None
-        self.stock_combo = None
-        
-        # Флаг для кнопки "Заказы" - будем добавлять ее внизу
-        has_orders_action = False
-        
-        # Перебор списка действий
-        for action in roles_actions_list:
-            match (action):
-                case ("Поиск"):
-                    self.create_search_block()
-                case ("Сортировка"):
-                    self.create_sort_block()
-                case ("Фильтрация"):
-                    self.create_filter_block()
-                case ("Заказы"):
-                    # Устанавливаем флаг, что кнопка "Заказы" нужна
-                    has_orders_action = True
-                case _:  # Аналог default
-                    continue
-
-        # Создание области прокрутки для списка товаров
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.update_items_display(self.database.get_all_items())  # Изначально пусто
-        self.frame_layout.addWidget(self.scroll_area)
-
-        # Кнопка добавления товара (только для администратора)
-        if Storage.get_user_role() == "Администратор":
-            create_card_btn = QPushButton("Добавить товар")
-            create_card_btn.setObjectName("button")
-            create_card_btn.clicked.connect(
-                lambda: self.controller.switch_window(CreateCardWindow.CreateCardFrame)
-            )
-            self.frame_layout.addWidget(create_card_btn)
-
-        # Кнопка "Заказы" (для менеджера и администратора)
-        if has_orders_action:
-            orders_button = QPushButton("Заказы")
-            orders_button.setObjectName("button")
-            orders_button.clicked.connect(
-                lambda: self.controller.switch_window(
-                    OrdersCardsWindow.OrdersCardsFrame
-                )
-            )
-            self.frame_layout.addWidget(orders_button)
-
-    def create_sort_block(self):
-        """ Метод создания блока сортировки по количеству на складе"""
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-
-        # Надпись "Сортировать по количеству на складе"
-        sort_label = QLabel("Сортировать по количеству на складе:")
-        sort_label.setObjectName("UpdateTextHint")
-        layout.addWidget(sort_label)
-        
-        # Радиокнопки для выбора направления сортировки
-        self.sort_asc_radio = QRadioButton("↑ Возрастание")
-        self.sort_desc_radio = QRadioButton("↓ Убывание")
-        
-        # Создаем группу кнопок
-        self.sort_button_group = QButtonGroup()
-        self.sort_button_group.addButton(self.sort_asc_radio)
-        self.sort_button_group.addButton(self.sort_desc_radio)
-        
-        # Ничего не выбрано по умолчанию
-        self.sort_asc_radio.setChecked(False)
-        self.sort_desc_radio.setChecked(False)
-        
-        # Подключаем изменение сортировки
-        self.sort_asc_radio.toggled.connect(self.on_any_change)
-        self.sort_desc_radio.toggled.connect(self.on_any_change)
-        
-        layout.addWidget(self.sort_asc_radio)
-        layout.addWidget(self.sort_desc_radio)
+            on_click = self.open_update_product if Storage.get_user_role() == "Администратор" else None
+            for item in items:
+                layout.addWidget(ProductCard(item, on_click))
         layout.addStretch()
-        
-        self.frame_layout.addWidget(widget)
-
-    def create_search_block(self):
-        """ Метод для создания поля для поиска """
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
-        
-        # Подсказка
-        layout.addWidget(QLabel("Поиск:", objectName="UpdateTextHint"))
-        
-        self.search_edit = QLineEdit()
-        self.search_edit.setObjectName("search_edit")
-        self.search_edit.textChanged.connect(self.on_any_change)
-        layout.addWidget(self.search_edit)
-        
-        self.frame_layout.addWidget(widget)
-
-    def update_items_display(self, items_list):
-        """Обновляет карточки товаров"""
-        container = self.create_items_cards_from_list(items_list)
-        # Обновление контейнера (там уже будет новый состав карточек)
         self.scroll_area.setWidget(container)
 
-    def create_filter_block(self):
-        """ Метод для создания поля фильтрации"""
-        widget = QWidget()
-        layout = QHBoxLayout(widget)
+    def open_create_product(self):
+        self.controller.invalidate_frame(CreateCardWindow.CreateCardFrame)
+        self.controller.switch_window(CreateCardWindow.CreateCardFrame)
 
-        # Фильтр по поставщику
-        layout.addWidget(QLabel("Поставщик:", objectName="UpdateTextHint"))
-        
-        self.company_combo = QComboBox()
-        self.company_combo.setObjectName("company_filter")
-        
-        # Подгрузка списка поставщиков из БД
-        deliveryman = self.database.take_all_deliveryman()  # Список поставщиков из Таблицы
-        self.company_combo.addItems(deliveryman)
-        
-        # Подключаем обработчик с проверкой на "Все поставщики"
-        self.company_combo.currentIndexChanged.connect(self.on_company_filter_changed)
-        
-        layout.addWidget(self.company_combo)
-        layout.addStretch()
-        
-        self.frame_layout.addWidget(widget)
-
-    def on_company_filter_changed(self, index):
-        """Обработчик изменения фильтра по поставщику"""
-        # Если выбрано "Все поставщики" (первый элемент), сбрасываем сортировку
-        if index == 0:
-            # Сбрасываем радиокнопки сортировки
-            if self.sort_asc_radio:
-                self.sort_asc_radio.setChecked(False)
-            if self.sort_desc_radio:
-                self.sort_desc_radio.setChecked(False)
-        
-        # Всегда обновляем отображение
-        self.on_any_change()
-
-    def create_items_cards_from_list(self, items_list):
-        """Создаёт виджет с карточками из переданного списка"""
-        cards_container = QWidget()
-        cards_container_layout = QVBoxLayout(cards_container)
-
-        if not items_list:
-            # Если товаров не найдено
-            no_items_label = QLabel("Такого товара не найдено")
-            no_items_label.setObjectName("Title")
-            no_items_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            cards_container_layout.addWidget(no_items_label)
-            return cards_container
-
-        for item in items_list:
-            item_card = QWidget()
-            item_card.setObjectName("item_card")
-            item_card.setMaximumHeight(300)
-            item_card_hbox = QHBoxLayout(item_card)
-
-            # Устанавливаем стили для подсветки КАРТОЧКИ
-            if item['sale'] > 15:
-                # Если скидка >15% - вся карточка зеленая
-                item_card.setStyleSheet("background-color: #2E8B57")
-            else:
-                item_card.setStyleSheet("background-color: white")
-
-            # Кнопка редактирования
-            update_button = QPushButton()
-            update_button.setObjectName("update_button")
-            update_button.setFixedHeight(280)
-
-            # Даем кнопке имя в виде ID, который является PK в таблице
-            update_button.setAccessibleName(str(item["id"]))
-            update_button.clicked.connect(self.go_to_update_window)
-
-            # Разметка для размещения строчек текста
-            information_vbox = QVBoxLayout(update_button)
-            update_button.setLayout(information_vbox)
-
-            # Преобразуем decimal.Decimal в float для вычислений
-            cost = float(item['cost']) if hasattr(item['cost'], '__float__') else float(item['cost'])
-            sale_percent = float(item['sale'])
-            
-            # Создаем виджеты для цен
-            if item['sale'] > 0:
-                # Перечеркнутая старая цена
-                final_cost = QLabel(f"Цена: {item['cost']}")
-                final_cost.setStyleSheet("color: red; text-decoration: line-through;")
-                final_cost.setFixedWidth(110)
-                
-                # Новая цена со скидкой
-                discounted_price = cost - (cost * (sale_percent / 100))
-                another_cost = QLabel(f"{discounted_price:.2f}")
-                another_cost.setStyleSheet("color: black; font-weight: bold;")
-            else:
-                # Обычная цена
-                final_cost = QLabel(f"Цена: {item['cost']}")
-                final_cost.setStyleSheet("color: black;")
-                final_cost.setFixedWidth(110)
-                another_cost = QLabel("")
-
-            item_card_hbox.addWidget(self.create_picture(item["picture"]))
-            
-            # Создаем текстовые метки с правильными стилями
-            category_label = QLabel(f"{item['category']} | {item['name']}")
-            category_label.setObjectName("cardText")
-            
-            description_label = QLabel(f"Описание товара: {item['information']}")
-            description_label.setObjectName("cardText")
-            description_label.setWordWrap(True)
-            
-            creator_label = QLabel(f"Производитель: {item['creator']}")
-            creator_label.setObjectName("cardText")
-            creator_label.setWordWrap(True)
-            
-            deliveryman_label = QLabel(f"Поставщик: {item['deliveryman']}")
-            deliveryman_label.setObjectName("cardText")
-            deliveryman_label.setWordWrap(True)
-            
-            unit_label = QLabel(f"Единица измерения: {item['edinica']}")
-            unit_label.setObjectName("cardText")
-            unit_label.setWordWrap(True)
-
-            information_vbox.addWidget(category_label)
-            information_vbox.addWidget(description_label)
-            information_vbox.addWidget(creator_label)
-            information_vbox.addWidget(deliveryman_label)
-
-            hbox = QHBoxLayout()
-            hbox.addWidget(final_cost)
-            hbox.addWidget(another_cost)
-            information_vbox.addLayout(hbox)
-
-            information_vbox.addWidget(unit_label)
-
-            # Строка "Количество на складе" - подсвечивается голубым если товара нет
-            count_label = QLabel(f"Количество на складе: {item['count']}")
-            count_label.setObjectName("cardText")
-            count_label.setWordWrap(True)
-            
-            # Если товара нет на складе, подсвечиваем только эту строку голубым
-            if item['count'] == 0:
-                count_label.setStyleSheet("""
-                    font-size: 20px;
-                    color: black;
-                    background-color: #87CEEB;
-                    padding: 2px;
-                    """)
-            else:
-                count_label.setStyleSheet("font-size: 20px; color: black; background: none;")
-            
-            information_vbox.addWidget(count_label)
-
-            item_card_hbox.addWidget(update_button)
-            
-            # Виджет скидки
-            discount_widget = self.create_discount_widget(str(item['sale']))
-            item_card_hbox.addWidget(discount_widget)
-
-            cards_container_layout.addWidget(item_card)
-
-        return cards_container
-
-    def go_to_update_window(self):
-        """
-        Обработка нажатия на кнопку для переходя в окно редактирования
-        :return: Ничего
-        """
-        # Если пользователь - Администратор
-        if Storage.get_user_role() == "Администратор":
-            sender = self.sender()
-            print(sender.accessibleName())
-            # Устанавливаем ID карточки товара, с которой будет вестись работа
-            Storage.set_item_id(sender.accessibleName())
-
-            # Переход на новое окно
-            self.controller.switch_window(goal_frame=UpdateCardWindow.UpdateCardFrame)
-
-    def create_discount_widget(self, sale_count: str):
-        """
-        Паттер для создания виджета со скидкой
-        :param sale_count: Количество скидки
-        :return: QWidget
-        """
-        widget = QWidget()
-        widget.setObjectName("sale_widget")
-        widget.setFixedWidth(100)
-        widget_layout = QVBoxLayout(widget)
-        
-        # Создаем один лейбл с двумя строками
-        discount_label = QLabel(f"Скидка:\n{sale_count}%")
-        discount_label.setObjectName("sale_text")
-        discount_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Добавляем виджет
-        widget_layout.addWidget(discount_label)
-        
-        return widget
-
-    def create_picture(self, picture_name: str) -> QLabel:
-        """
-        Паттерн для создания фото
-        :param picture_name: имя фото
-        :return: QLabel
-        """
-        picture_socket = QLabel()
-        picture_socket.setScaledContents(True)
-        picture_socket.setFixedSize(120, 120)
-
-        # Получаем путь к папке проекта динамически
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_file_dir)
-        icons_dir = os.path.join(project_root, "ICONS")
-        
-        # Формируем путь к изображению
-        if picture_name and picture_name != "nan" and picture_name != "":
-            picture_path = os.path.join(icons_dir, picture_name)
-        else:
-            picture_path = os.path.join(icons_dir, "picture.png")
-
-        # Проверяем существование файла
-        try:
-            if os.path.exists(picture_path):
-                picture = QPixmap(picture_path)
-                if not picture.isNull():
-                    picture_socket.setPixmap(picture)
-                else:
-                    self.set_placeholder_image(picture_socket)
-            else:
-                self.set_placeholder_image(picture_socket)
-        except Exception as e:
-            print(f"Ошибка загрузки изображения {picture_path}: {e}")
-            self.set_placeholder_image(picture_socket)
-            
-        return picture_socket
-
-    def set_placeholder_image(self, label):
-        """Устанавливает заглушку для изображения"""
-        label.setText("Нет фото")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+    def open_update_product(self, item_id):
+        Storage.set_item_id(item_id)
+        self.controller.invalidate_frame(UpdateCardWindow.UpdateCardFrame)
+        self.controller.switch_window(UpdateCardWindow.UpdateCardFrame)
 
     def go_back_to_log_in_window(self):
-        """ Обработчик нажатий на кнопку возврата на главное окно """
-        if Messages.send_I_message("Вы точно хотите вернуться в окно авторизации?", 
-                                "Подтверждение выхода") < 20000:
-            # Очищаем данные пользователя перед выходом
-            Storage.clear_all()
-            
-            # Удаляем закэшированные фреймы, кроме окна авторизации
-            self.controller.clear_cache_except(['LogInFrame'])
-            
-            from FRAMES import LogInWindow
-            self.controller.switch_window(LogInWindow.LogInFrame)
+        if not Messages.ask_confirmation(
+            "Выйти из учётной записи и вернуться к окну входа?",
+            "Выход из системы",
+        ):
+            return
+        Storage.clear_all()
+        self.controller.clear_cache_except(["LogInFrame"])
+        self.controller.switch_window(LogInWindow.LogInFrame)

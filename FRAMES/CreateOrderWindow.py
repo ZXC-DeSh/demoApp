@@ -1,443 +1,184 @@
-from PySide6.QtWidgets import (QFrame, QPushButton, QHBoxLayout, QScrollArea, QComboBox,
-                               QWidget, QVBoxLayout, QLabel, QLineEdit, QTableWidget, 
-                               QTableWidgetItem, QHeaderView, QMessageBox)
 from PySide6.QtCore import Qt
-from datetime import datetime, timedelta
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
 import Messages
-from FRAMES import HomePageWindow, OrdersCardsWindow
-from StaticStorage import Storage
-from PySide6.QtGui import QPixmap
-import os
+from FRAMES import OrdersCardsWindow
+from FRAMES.components import create_header, create_title
+from FRAMES.order_form import OrderDetailsForm
+
 
 class CreateOrderFrame(QFrame):
     def __init__(self, controller):
-        """
-        Конструктор класса создания заказа
-        :param controller: "self" из класса MainApplicationClass
-        """
         super().__init__()
         self.controller = controller
         self.database = controller.db
-        
-        # Данные заказа
-        self.order_items = []  # Список товаров в заказе: [{'article': '', 'name': '', 'quantity': 1, 'available': 0}]
-        self.available_products = []  # Список доступных товаров
-        
+        self.order_items = []
+        self.available_products = []
         self.frame_layout = QVBoxLayout(self)
         self.setup_ui()
 
     def setup_ui(self):
-        """Генерация интерфейса"""
-        # Шапка с кнопкой назад и ФИО
-        header_widget = QWidget()
-        header_widget.setObjectName("header_widget")
-        header_widget_hbox = QHBoxLayout(header_widget)
+        self.frame_layout.addWidget(create_header(self.database, self.go_back_to_orders_window))
+        self.frame_layout.addWidget(create_title("Создание нового заказа"))
 
-        # Кнопка "Назад"
-        back_header_btn = QPushButton("< Назад")
-        back_header_btn.setFixedWidth(150)
-        back_header_btn.clicked.connect(self.go_back_to_orders_window)
-        back_header_btn.setObjectName("back_header_button")
-        header_widget_hbox.addWidget(back_header_btn)
-        header_widget_hbox.addStretch()
-
-        # ЛОГОТИП по центру
-        logo_label = QLabel()
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Загружаем логотип
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_file_dir)
-        logo_path = os.path.join(project_root, "ICONS", "logo.png")
-        
-        if os.path.exists(logo_path):
-            logo_pixmap = QPixmap(logo_path)
-            # Масштабируем логотип до нужного размера
-            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_label.setPixmap(logo_pixmap)
-        else:
-            # Если файл не найден, показываем текстовый логотип
-            logo_label.setText("ОБУВЬ")
-            logo_label.setStyleSheet("font-size: 28px; font-weight: bold; color: black;")
-        
-        header_widget_hbox.addWidget(logo_label)
-
-        # Растягивающий элемент
-        header_widget_hbox.addStretch()
-
-        # ФИО пользователя
-        user_data = self.database.take_user_data()
-        fio_widget = QWidget()
-        fio_layout = QVBoxLayout(fio_widget)
-        fio_layout.addWidget(QLabel(user_data["user_name"].replace(" ", "\n"), objectName="FIO"))
-        header_widget_hbox.addWidget(fio_widget)
-
-        self.frame_layout.addWidget(header_widget)
-
-        # Заголовок
-        title = QLabel("Создание нового заказа")
-        title.setObjectName("Title")
-        self.frame_layout.addWidget(title)
-
-        # Область с формой
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        form_container = QWidget()
-        self.form_layout = QVBoxLayout(form_container)
-        
-        self.create_order_form()
-        scroll_area.setWidget(form_container)
-        self.frame_layout.addWidget(scroll_area)
-
-        # Кнопка сохранения
-        save_btn = QPushButton("Создать заказ")
-        save_btn.setObjectName("button")
-        save_btn.clicked.connect(self.create_order)
-        self.frame_layout.addWidget(save_btn)
-
-    def create_order_form(self):
-        """Создает форму для ввода данных заказа"""
-        # 1. Артикул заказа (автогенерация)
-        self.article_input = self.create_input_field("Артикул заказа:", "Автоматически сгенерируется", True)
-        self.form_layout.addWidget(self.article_input)
-
-        # 2. Статус заказа
-        self.status_combo = self.create_combo_field("Статус заказа:", ["Новый", "В обработке", "Завершен"])
-        self.status_combo.layout().itemAt(1).widget().setCurrentText("Новый")
-        self.form_layout.addWidget(self.status_combo)
-
-        # 3. Адрес пункта выдачи
-        self.pvz_combo = self.create_combo_field("Адрес пункта выдачи:", self.database.take_all_pvz_addresses())
-        self.form_layout.addWidget(self.pvz_combo)
-
-        # 4. Дата заказа (текущая дата)
-        current_date = datetime.now().strftime("%d.%m.%Y")
-        self.create_date_input = self.create_input_field("Дата заказа:", current_date, True)
-        self.form_layout.addWidget(self.create_date_input)
-        
-        # 5. Дата выдачи (доставки)
-        # Устанавливаем дату на 3 дня вперед по умолчанию
-        delivery_date = (datetime.now() + timedelta(days=3)).strftime("%d.%m.%Y")
-        self.delivery_date_input = self.create_input_field("Дата выдачи (ДД.ММ.ГГГГ):", delivery_date)
-        self.form_layout.addWidget(self.delivery_date_input)
-
-        # Блок добавления товаров
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        container = QWidget()
+        self.form_layout = QVBoxLayout(container)
+        self.details_form = OrderDetailsForm(self.database)
+        self.form_layout.addWidget(self.details_form)
         self.create_products_section()
-        
-        # Таблица товаров в заказе
         self.create_order_items_table()
+        scroll.setWidget(container)
+        self.frame_layout.addWidget(scroll)
 
-    def create_combo_field(self, label_text, items_list):
-        """Создает поле с выпадающим списком"""
-        widget = QWidget()
-        widget.setFixedHeight(80)
-        layout = QVBoxLayout(widget)
-        
-        layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
-        combo = QComboBox()
-        combo.addItems(items_list)
-        combo.setObjectName("UpdateTextEdit")
-        layout.addWidget(combo)
-        
-        return widget
-
-    def create_input_field(self, label_text, placeholder, readonly=False):
-        """Создает поле для ввода текста"""
-        widget = QWidget()
-        widget.setFixedHeight(80)
-        layout = QVBoxLayout(widget)
-        
-        layout.addWidget(QLabel(label_text, objectName="UpdateTextHint"))
-        input_field = QLineEdit()
-        input_field.setPlaceholderText(placeholder)
-        input_field.setReadOnly(readonly)
-        input_field.setObjectName("UpdateTextEdit")
-        layout.addWidget(input_field)
-        
-        return widget
+        save_button = QPushButton("Создать заказ", objectName="button")
+        save_button.clicked.connect(self.create_order)
+        self.frame_layout.addWidget(save_button)
 
     def create_products_section(self):
-        """Создает секцию для добавления товаров в заказ"""
-        products_widget = QWidget()
-        products_layout = QVBoxLayout(products_widget)
-        
-        products_layout.addWidget(QLabel("Добавление товаров:", objectName="UpdateTextHint"))
+        section = QWidget()
+        layout = QVBoxLayout(section)
+        layout.addWidget(QLabel("Добавление товаров:", objectName="UpdateTextHint"))
 
-        # Выбор товара и количества
-        products_row = QWidget()
-        products_row_layout = QHBoxLayout(products_row)
-
-        # Выпадающий список товаров
-        self.product_combo = QComboBox()
-        self.load_available_products()
-        self.product_combo.setObjectName("UpdateTextEdit")
-        products_row_layout.addWidget(QLabel("Товар:"))
-        products_row_layout.addWidget(self.product_combo)
-
-        # Поле количества
-        self.quantity_input = QLineEdit()
-        self.quantity_input.setPlaceholderText("Количество")
-        self.quantity_input.setText("1")
-        self.quantity_input.setObjectName("UpdateTextEdit")
+        row = QWidget()
+        row_layout = QGridLayout(row)
+        row_layout.addWidget(QLabel("Товар:"), 0, 0)
+        self.product_combo = QComboBox(objectName="UpdateTextEdit")
+        row_layout.addWidget(self.product_combo, 0, 1, 1, 2)
+        row_layout.addWidget(QLabel("Количество:"), 1, 0)
+        self.quantity_input = QLineEdit("1", objectName="UpdateTextEdit")
         self.quantity_input.setFixedWidth(100)
-        products_row_layout.addWidget(QLabel("Количество:"))
-        products_row_layout.addWidget(self.quantity_input)
-
-        # Кнопка добавления
-        add_product_btn = QPushButton("Добавить")
-        add_product_btn.setObjectName("button")
-        add_product_btn.clicked.connect(self.add_product_to_order)
-        products_row_layout.addWidget(add_product_btn)
-
-        products_layout.addWidget(products_row)
-        self.form_layout.addWidget(products_widget)
-
-    def create_order_items_table(self):
-        """Создает таблицу товаров в заказе"""
-        self.form_layout.addWidget(QLabel("Товары в заказе:", objectName="UpdateTextHint"))
-
-        self.items_table = QTableWidget()
-        self.items_table.setColumnCount(5)
-        self.items_table.setHorizontalHeaderLabels(["Артикул", "Наименование", "Количество", "Доступно", "Действия"])
-        self.items_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.items_table.setMaximumHeight(300)
-        
-        self.form_layout.addWidget(self.items_table)
+        row_layout.addWidget(self.quantity_input, 1, 1)
+        add_button = QPushButton("Добавить", objectName="small_button")
+        add_button.clicked.connect(self.add_product_to_order)
+        row_layout.addWidget(add_button, 1, 2)
+        layout.addWidget(row)
+        self.form_layout.addWidget(section)
+        self.load_available_products()
 
     def load_available_products(self):
-        """Загружает список доступных товаров"""
-        try:
-            products = self.database.get_all_items()
-            self.available_products = products
-            self.product_combo.clear()
-            
-            for product in products:
-                display_text = f"{product['article']} - {product['name']} (остаток: {product['count']})"
-                self.product_combo.addItem(display_text, product['article'])
-                
-        except Exception as e:
-            print(f"Ошибка загрузки товаров: {e}")
-            Messages.send_C_message("Ошибка загрузки списка товаров!")
+        self.available_products = self.database.get_all_items()
+        self.product_combo.clear()
+        for product in self.available_products:
+            text = f"{product['article']} - {product['name']} (остаток: {product['count']})"
+            self.product_combo.addItem(text, product["article"])
+
+    def create_order_items_table(self):
+        self.form_layout.addWidget(QLabel("Товары в заказе:", objectName="UpdateTextHint"))
+        self.items_table = QTableWidget()
+        self.items_table.setColumnCount(5)
+        self.items_table.setHorizontalHeaderLabels(
+            ["Артикул", "Наименование", "Количество", "Доступно", "Действия"]
+        )
+        self.items_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.items_table.setMaximumHeight(300)
+        self.form_layout.addWidget(self.items_table)
 
     def add_product_to_order(self):
-        """Добавляет товар в заказ"""
+        article = self.product_combo.currentData()
+        product = next((item for item in self.available_products if item["article"] == article), None)
+        if product is None:
+            Messages.show_error("Выберите товар.")
+            return
+        if any(item["article"] == article for item in self.order_items):
+            Messages.show_warning("Этот товар уже добавлен в заказ.")
+            return
         try:
-            # Получаем выбранный товар
-            current_index = self.product_combo.currentIndex()
-            if current_index < 0:
-                Messages.send_C_message("Выберите товар!", "Ошибка")
-                return
+            quantity = int(self.quantity_input.text())
+        except ValueError:
+            Messages.show_error("Количество должно быть целым числом.")
+            return
+        if quantity <= 0 or quantity > product["count"]:
+            Messages.show_error(
+                f"Укажите количество от 1 до {product['count']}.",
+                "Недостаточно товара",
+            )
+            return
 
-            product_article = self.product_combo.itemData(current_index)
-            product = next((p for p in self.available_products if p['article'] == product_article), None)
-            
-            if not product:
-                Messages.send_C_message("Товар не найден!")
-                return
-
-            # Проверяем количество
-            try:
-                quantity = int(self.quantity_input.text())
-                if quantity <= 0:
-                    Messages.send_C_message("Количество должно быть положительным числом!")
-                    return
-                    
-                if quantity > product['count']:
-                    Messages.send_C_message(f"Недостаточно товара на складе! Доступно: {product['count']}")
-                    return
-                    
-            except ValueError:
-                Messages.send_C_message("Введите корректное количество!")
-                return
-
-            # Проверяем, не добавлен ли уже товар
-            existing_item = next((item for item in self.order_items if item['article'] == product_article), None)
-            if existing_item:
-                Messages.send_C_message("Этот товар уже добавлен в заказ!")
-                return
-
-            # Добавляем товар в заказ
-            self.order_items.append({
-                'article': product_article,
-                'name': product['name'],
-                'quantity': quantity,
-                'available': product['count']
-            })
-
-            # Обновляем таблицу
-            self.update_order_items_table()
-            
-            # Сбрасываем поля
-            self.quantity_input.setText("1")
-            
-            Messages.send_I_message("Товар добавлен в заказ!")
-
-        except Exception as e:
-            Messages.send_C_message(f"Ошибка добавления товара: {str(e)}")
+        self.order_items.append(
+            {
+                "article": article,
+                "name": product["name"],
+                "quantity": quantity,
+                "available": product["count"],
+            }
+        )
+        self.quantity_input.setText("1")
+        self.update_order_items_table()
+        self.details_form.set_article_from_items(self.order_items)
 
     def update_order_items_table(self):
-        """Обновляет таблицу товаров в заказе"""
         self.items_table.setRowCount(len(self.order_items))
-        
         for row, item in enumerate(self.order_items):
-            # Артикул
-            self.items_table.setItem(row, 0, QTableWidgetItem(item['article']))
-            # Наименование
-            self.items_table.setItem(row, 1, QTableWidgetItem(item['name']))
-            # Количество
-            quantity_item = QTableWidgetItem(str(item['quantity']))
-            quantity_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.items_table.setItem(row, 2, quantity_item)
-            # Доступно
-            available_item = QTableWidgetItem(str(item['available']))
-            available_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.items_table.setItem(row, 3, available_item)
-            
-            # Кнопка удаления
-            delete_btn = QPushButton("Удалить")
-            delete_btn.setObjectName("button")
-            delete_btn.clicked.connect(lambda checked, r=row: self.remove_product_from_order(r))
-            self.items_table.setCellWidget(row, 4, delete_btn)
+            self.items_table.setItem(row, 0, QTableWidgetItem(item["article"]))
+            self.items_table.setItem(row, 1, QTableWidgetItem(item["name"]))
+            for column, key in ((2, "quantity"), (3, "available")):
+                cell = QTableWidgetItem(str(item[key]))
+                cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.items_table.setItem(row, column, cell)
+            delete_button = QPushButton("Удалить", objectName="table_button")
+            delete_button.clicked.connect(lambda _, index=row: self.remove_product_from_order(index))
+            self.items_table.setCellWidget(row, 4, delete_button)
 
     def remove_product_from_order(self, row_index):
-        """Удаляет товар из заказа"""
         if 0 <= row_index < len(self.order_items):
-            removed_item = self.order_items.pop(row_index)
+            self.order_items.pop(row_index)
             self.update_order_items_table()
-            Messages.send_I_message(f"Товар '{removed_item['name']}' удален из заказа")
+            self.details_form.set_article_from_items(self.order_items)
 
     def create_order(self):
-        """Создает новый заказ"""
-        try:
-            # Валидация данных
-            if not self.validate_order_data():
-                return
-
-            # Подготавливаем данные заказа
-            order_data = {
-                'pvz_id': int(self.pvz_combo.layout().itemAt(1).widget().currentText().split(' | ')[0]),
-                'status': self.status_combo.layout().itemAt(1).widget().currentText(),
-                'delivery_date': self.parse_date(self.delivery_date_input.layout().itemAt(1).widget().text()),
-                'items': self.order_items
+        details = self.details_form.get_data()
+        if details is None or not self._validate_items():
+            return
+        user = self.database.take_user_data() or {"user_name": "Аккаунт Гостя"}
+        details.update(
+            {
+                "client_name": user["user_name"],
+                "code": self.database.get_next_order_code(),
+                "items": self.order_items,
             }
+        )
+        if not self.database.create_new_order(details):
+            Messages.show_error("Не удалось создать заказ в базе данных.")
+            return
 
-            print(f"Создаем заказ с данными: {order_data}")
+        Messages.show_info("Заказ успешно создан.", "Готово")
+        self.controller.invalidate_frame(OrdersCardsWindow.OrdersCardsFrame)
+        self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)
 
-            # Создаем заказ в БД
-            if self.database.create_new_order(order_data):
-                Messages.send_I_message("Заказ успешно создан!")
-                
-                # Обновляем список заказов в кэшированном окне
-                self.refresh_orders_window()
-                
-                self.go_back_to_orders_window()
-            else:
-                Messages.send_C_message("Ошибка создания заказа в базе данных!")
-
-        except Exception as e:
-            Messages.send_C_message(f"Ошибка создания заказа: {str(e)}")
-            import traceback
-            traceback.print_exc()
-
-    def refresh_orders_window(self):
-        """Обновляет данные в окне списка заказов"""
-        try:
-            # Удаляем старый фрейм из кэша
-            if 'OrdersCardsFrame' in self.controller.frames_cache:
-                old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
-                if old_frame:
-                    old_frame.deleteLater()
-                print("Старый фрейм заказов удален из кэша")
-            
-            # Создаем новый фрейм
-            from FRAMES import OrdersCardsWindow
-            new_frame = OrdersCardsWindow.OrdersCardsFrame(self.controller)
-            self.controller.frames_cache['OrdersCardsFrame'] = new_frame
-            self.controller.frame_container.addWidget(new_frame)
-            self.controller.frame_container.setCurrentWidget(new_frame)
-            
-            print("Создан новый фрейм заказов с обновленными данными")
-            
-        except Exception as e:
-            print(f"Ошибка обновления списка заказов: {e}")
-            import traceback
-            traceback.print_exc()
-
-    def validate_order_data(self):
-        """Валидация данных заказа"""
-        # Проверяем ПВЗ
-        pvz_text = self.pvz_combo.layout().itemAt(1).widget().currentText()
-        if not pvz_text:
-            Messages.send_C_message("Выберите пункт выдачи!", "Ошибка")
-            return False
-
-        # Проверяем дату выдачи
-        delivery_date_text = self.delivery_date_input.layout().itemAt(1).widget().text()
-        if not delivery_date_text:
-            Messages.send_C_message("Введите дату выдачи!", "Ошибка")
-            return False
-        
-        try:
-            delivery_date = self.parse_date(delivery_date_text)
-            current_date = datetime.now().date()
-            if delivery_date < current_date:
-                Messages.send_C_message("Дата выдачи не может быть в прошлом!", "Ошибка")
-                return False
-        except ValueError:
-            Messages.send_C_message("Введите корректную дату выдачи (ДД.ММ.ГГГГ)!", "Ошибка")
-            return False
-
-        # Проверяем товары в заказе
+    def _validate_items(self) -> bool:
         if not self.order_items:
-            Messages.send_C_message("Добавьте хотя бы один товар в заказ!", "Ошибка")
+            Messages.show_error("Добавьте хотя бы один товар в заказ.")
             return False
-
-        # Проверяем, что все товары все еще доступны в нужном количестве
+        current_products = {item["article"]: item for item in self.database.get_all_items()}
         for item in self.order_items:
-            product = next((p for p in self.available_products if p['article'] == item['article']), None)
-            if not product:
-                Messages.send_C_message(f"Товар {item['article']} больше не доступен!", "Ошибка")
+            product = current_products.get(item["article"])
+            if product is None or item["quantity"] > product["count"]:
+                Messages.show_error(
+                    f"Остаток товара «{item['name']}» изменился. Обновите состав заказа.",
+                    "Недостаточно товара",
+                )
                 return False
-            if item['quantity'] > product['count']:
-                Messages.send_C_message(f"Недостаточно товара '{item['name']}' на складе! Доступно: {product['count']}", "Ошибка")
-                return False
-
         return True
 
-    def parse_date(self, date_str):
-        """Парсит дату из строки"""
-        try:
-            if '.' in date_str:
-                return datetime.strptime(date_str, "%d.%m.%Y").date()
-            elif '-' in date_str:
-                return datetime.strptime(date_str, "%Y-%m-%d").date()
-            else:
-                raise ValueError("Неверный формат даты")
-        except Exception as e:
-            raise ValueError(f"Неверный формат даты: {date_str}")
-
     def go_back_to_orders_window(self):
-        """Возврат к списку заказов с обновлением данных"""
-        try:
-            # Удаляем старый фрейм из кэша
-            if 'OrdersCardsFrame' in self.controller.frames_cache:
-                old_frame = self.controller.frames_cache.pop('OrdersCardsFrame')
-                if old_frame:
-                    old_frame.deleteLater()
-                print("Старый фрейм заказов удален из кэша")
-            
-            # Создаем новый фрейм
-            from FRAMES import OrdersCardsWindow
-            new_frame = OrdersCardsWindow.OrdersCardsFrame(self.controller)
-            self.controller.frames_cache['OrdersCardsFrame'] = new_frame
-            self.controller.frame_container.addWidget(new_frame)
-            self.controller.frame_container.setCurrentWidget(new_frame)
-            
-            print("Создан новый фрейм заказов с обновленными данными")
-            
-        except Exception as e:
-            print(f"Ошибка возврата к списку заказов: {e}")
-            import traceback
-            traceback.print_exc()
-            from FRAMES import OrdersCardsWindow
+        if Messages.ask_confirmation(
+            "Прекратить создание заказа? Несохранённые данные будут потеряны.",
+            "Подтверждение выхода",
+        ):
             self.controller.switch_window(OrdersCardsWindow.OrdersCardsFrame)

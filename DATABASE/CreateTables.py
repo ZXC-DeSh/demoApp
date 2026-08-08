@@ -13,7 +13,7 @@ CREATE TABLE Client (
 create_table_ITEMS = """
 CREATE TABLE Items(
     item_id SERIAL PRIMARY KEY NOT NULL,
-    item_article TEXT NOT NULL,
+    item_article TEXT NOT NULL UNIQUE,
     item_name TEXT NOT NULL,
     item_edinica TEXT NOT NULL,
     item_cost DECIMAL(10,2) NOT NULL CHECK (item_cost >= 0),
@@ -50,7 +50,7 @@ create_table_ORDER_ITEMS = """
 CREATE TABLE OrderItems(
     order_item_id SERIAL PRIMARY KEY NOT NULL,
     order_id INTEGER NOT NULL REFERENCES Orders(order_id) ON DELETE CASCADE,
-    product_article TEXT NOT NULL,
+    product_article TEXT NOT NULL REFERENCES Items(item_article) ON UPDATE CASCADE,
     quantity INTEGER NOT NULL CHECK (quantity > 0)
 );
 """

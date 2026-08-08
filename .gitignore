@@ -9,3 +9,4 @@ ICONS/*
 temp/*
 !temp/.gitkeep
 Demo-main.zip
+.idea/
